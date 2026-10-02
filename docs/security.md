@@ -61,7 +61,7 @@ the file reaches Appwrite:
 | Check | Rule |
 | --- | --- |
 | Extension | `.pdf`, `.jpg`, `.jpeg`, `.png` |
-| Size | 1 byte – 5 MB (`MAX_UPLOAD_BYTES`) |
+| Size | 1 byte – 3 MB (`MAX_UPLOAD_BYTES`), sized to stay under the Vercel request-body ceiling — see [Upload size limits](environment.md#upload-size-limits) |
 | Content | Magic-byte signature must match the extension |
 
 The signature test is the load-bearing one. A browser-supplied `blob.type` is

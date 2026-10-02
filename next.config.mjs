@@ -1,6 +1,21 @@
 import { withSentryConfig } from "@sentry/nextjs";
+
 /** @type {import('next').NextConfig} */
-const nextConfig = {};
+const nextConfig = {
+  experimental: {
+    // Registration uploads an identification document through a server action,
+    // so the request body carries the file. This defaults to 1mb, which
+    // silently rejects most scans with an opaque error.
+    //
+    // 4mb is deliberate and is the ceiling that matters here: Vercel rejects
+    // request bodies over 4.5mb (Node) / 4mb (Edge) before this value is ever
+    // consulted. MAX_UPLOAD_BYTES in src/lib/uploads.ts sits below it so the
+    // user gets a validation message instead of a 413.
+    serverActions: {
+      bodySizeLimit: "4mb",
+    },
+  },
+};
 
 export default withSentryConfig(nextConfig, {
   // For all available options, see:

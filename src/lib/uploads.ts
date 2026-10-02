@@ -1,4 +1,17 @@
-export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+/**
+ * Ceiling on a single uploaded file, chosen to sit below the whole stack of
+ * platform limits so this check is the one that actually rejects an oversized
+ * file, instead of an opaque 413 from further up:
+ *
+ *   MAX_UPLOAD_BYTES (3mb)
+ *     < serverActions.bodySizeLimit (4mb, next.config.mjs)   — 10-20kb of
+ *     < Vercel request body limit (4.5mb Node / 4mb Edge)     multipart
+ *                                                              overhead + form fields
+ *
+ * Raising this past ~3.7mb reintroduces files that pass this check and then
+ * fail at the edge with no useful error for the user.
+ */
+export const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
 
 const ALLOWED_UPLOAD_MIME_TYPES = [
   "application/pdf",

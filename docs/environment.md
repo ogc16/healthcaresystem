@@ -51,6 +51,24 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 
 Referenced in `next.config.mjs`.
 
+## Upload size limits
+
+Identification documents travel to `registerPatient` inside the request body
+of a server action, so three limits stack up:
+
+| Limit | Value | Where |
+| --- | --- | --- |
+| `MAX_UPLOAD_BYTES` | 3 MB | `src/lib/uploads.ts` — validates one file |
+| `serverActions.bodySizeLimit` | 4 MB | `next.config.mjs` — Next.js request body cap |
+| Vercel request body | 4.5 MB (Node) / 4 MB (Edge) | Platform, not configurable |
+
+The app-level limit is intentionally the lowest. Anything higher is unreachable:
+the file passes validation and then dies at the edge with a bare 413, which
+gives the user nothing to act on.
+
+Note that Next.js defaults `bodySizeLimit` to **1 MB**. Without the explicit
+`4mb` above, any document over 1 MB fails regardless of what the app allows.
+
 ## Appwrite collection setup
 
 Beyond the variables above, the appointments collection needs indexes. The
