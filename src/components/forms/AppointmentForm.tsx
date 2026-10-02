@@ -58,6 +58,8 @@ export const AppointmentForm = ({
   ) => {
     setIsLoading(true);
 
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
     let status;
     switch (type) {
       case "schedule":
@@ -94,6 +96,7 @@ export const AppointmentForm = ({
         const appointmentToUpdate = {
           userId,
           appointmentId: appointment?.$id!,
+          timeZone,
           appointment: {
             primaryPhysician: values.primaryPhysician,
             schedule: new Date(values.schedule),

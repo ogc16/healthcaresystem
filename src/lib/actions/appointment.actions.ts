@@ -11,6 +11,7 @@ import {
   databases,
   messaging,
 } from "../appwrite.config";
+import { isAdminSession } from "../auth/guards";
 import { formatDateTime, parseStringify } from "../utils";
 
 //  CREATE APPOINTMENT
@@ -34,6 +35,10 @@ export const createAppointment = async (
 
 //  GET RECENT APPOINTMENTS
 export const getRecentAppointmentList = async () => {
+  if (!(await isAdminSession())) {
+    throw new Error("Unauthorized: admin session required");
+  }
+
   try {
     const appointments = await databases.listDocuments(
       DATABASE_ID!,

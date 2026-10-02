@@ -1,12 +1,18 @@
 import Image from "next/image";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { StatCard } from "@/components/StatCard";
 import { columns } from "@/components/table/columns";
 import { DataTable } from "@/components/table/DataTable";
 import { getRecentAppointmentList } from "@/lib/actions/appointment.actions";
+import { isAdminSession } from "@/lib/auth/guards";
+
+import { signOutAdmin } from "./actions";
 
 const AdminPage = async () => {
+  if (!(await isAdminSession())) redirect("/admin/login");
+
   const appointments = await getRecentAppointmentList();
 
   return (
@@ -23,6 +29,12 @@ const AdminPage = async () => {
         </Link>
 
         <p className="text-16-semibold">Admin Dashboard</p>
+
+        <form action={signOutAdmin}>
+          <button type="submit" className="text-14-regular text-green-500">
+            Sign out
+          </button>
+        </form>
       </header>
 
       <main className="admin-main">

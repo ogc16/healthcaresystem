@@ -1,9 +1,6 @@
 <div align="center">
   <br />
-    <a href="https://youtu.be/lEflo_sc82g?feature=shared" target="_blank">
-      <img src="https://github.com/adrianhajdin/healthcare/assets/151519281/a7dd73b6-93de-484d-84e0-e7f4e299167b" alt="Project Banner">
-    </a>
-  <br />
+  <h3 align="center">CarePulse — A HealthCare Management System</h3>
 
   <div>
     <img src="https://img.shields.io/badge/-Next_JS-black?style=for-the-badge&logoColor=white&logo=nextdotjs&color=000000" alt="nextdotjs" />
@@ -12,47 +9,48 @@
     <img src="https://img.shields.io/badge/-Appwrite-black?style=for-the-badge&logoColor=white&logo=appwrite&color=FD366E" alt="appwrite" />
   </div>
 
-  <h3 align="center">A HealthCare Management System</h3>
+  <div align="center">
+      Patient registration, appointment scheduling, and an admin dashboard built with Next.js 14 and Appwrite.
+    </div>
 
-   <div align="center">
-     Build this project step by step with our detailed tutorial on <a href="https://www.youtube.com/@javascriptmastery/videos" target="_blank"><b>JavaScript Mastery</b></a> YouTube. Join the JSM family!
+    <div align="center">
+      <b>Project documentation:</b> <a href="docs/README.md">architecture</a> · <a href="docs/security.md">security</a> · <a href="docs/environment.md">environment variables</a>
     </div>
 </div>
+
+> **Note on admin access:** the admin dashboard is gated by a server-side
+> passkey (`ADMIN_PASSKEY`) and an httpOnly signed session cookie. The previous
+> implementation shipped the passkey to the browser via a `NEXT_PUBLIC_` env var
+> and validated it client-side, which exposed all appointment data to anyone who
+> visited `/admin`. See [docs/security.md](docs/security.md) before deploying,
+> and remove `NEXT_PUBLIC_ADMIN_PASSKEY` from your environment.
 
 ## 📋 <a name="table">Table of Contents</a>
 
 1. 🤖 [Introduction](#introduction)
 2. ⚙️ [Tech Stack](#tech-stack)
 3. 🔋 [Features](#features)
-4. 🤸 [Quick Start](#quick-start)
-5. 🕸️ [Snippets (Code to Copy)](#snippets)
-6. 🔗 [Assets](#links)
-7. 🚀 [More](#more)
-
-## 🚨 Tutorial
-
-This repository contains the code corresponding to an in-depth tutorial available on our YouTube channel, <a href="https://www.youtube.com/@javascriptmastery/videos" target="_blank"><b>JavaScript Mastery</b></a>.
-
-If you prefer visual learning, this is the perfect resource for you. Follow our tutorial to learn how to build projects like these step-by-step in a beginner-friendly manner!
-
-<a href="https://youtu.be/lEflo_sc82g?feature=shared" target="_blank"><img src="https://github.com/sujatagunale/EasyRead/assets/151519281/1736fca5-a031-4854-8c09-bc110e3bc16d" /></a>
+4. 🏗️ [Architecture](#architecture)
+5. 🤸 [Quick Start](#quick-start)
+6. 🕸️ [Snippets (Code to Copy)](#snippets)
+7. 🔗 [Assets](#links)
 
 ## <a name="introduction">🤖 Introduction</a>
 
 A healthcare patient management application that allows patients to easily register, book, and manage their appointments with doctors, featuring administrative tools for scheduling, confirming, and canceling appointments, along with SMS notifications, all built using Next.js.
 
-If you're getting started and need assistance or face any bugs, join our active Discord community with over **34k+** members. It's a place where people help each other out.
-
-<a href="https://discord.com/invite/n6EdbFJ" target="_blank"><img src="https://github.com/sujatagunale/EasyRead/assets/151519281/618f4872-1e10-42da-8213-1d69e486d02e" /></a>
-
 ## <a name="tech-stack">⚙️ Tech Stack</a>
 
-- Next.js
-- Appwrite
-- Typescript
-- TailwindCSS
-- ShadCN
-- Twilio
+| Layer | Technology |
+| --- | --- |
+| Framework | Next.js 14 (App Router), React 18 |
+| Language | TypeScript 5 (strict) |
+| Styling | Tailwind CSS, shadcn/ui (Radix UI) |
+| Backend | Appwrite — databases, storage, messaging |
+| Forms | React Hook Form + Zod |
+| Monitoring | Sentry |
+
+> SMS delivery uses Appwrite Messaging, not the Twilio SDK.
 
 ## <a name="features">🔋 Features</a>
 
@@ -76,6 +74,277 @@ If you're getting started and need assistance or face any bugs, join our active 
 
 and many more, including code architecture and reusability
 
+## <a name="architecture">🏗️ Architecture</a>
+
+Source lives under `src/`; see [docs/architecture.md](docs/architecture.md) for the full write-up.
+
+```text
+src/
+  app/          Routes (App Router), layouts, route handlers
+  components/   React components (ui/ = shadcn primitives)
+  lib/          Server logic: Appwrite client, actions, auth
+  constants/    Shared constants
+  types/        Global type declarations
+  middleware.ts Route protection
+public/         Static assets
+docs/           Documentation
+```
+
+The `@/*` path alias maps to `./src/*`.
+
+### Use cases
+
+```mermaid
+flowchart LR
+    Patient((Patient))
+    Admin((Admin))
+
+    subgraph CarePulse
+        UC1[Register as patient]
+        UC2[Book an appointment]
+        UC3[Upload identification document]
+        UC4[View booking confirmation]
+        UC5[Enter admin passkey]
+        UC6[View all appointments]
+        UC7[Schedule or confirm appointment]
+        UC8[Cancel appointment]
+        UC9[Send SMS notification]
+    end
+
+    Patient --> UC1
+    Patient --> UC2
+    Patient --> UC3
+    Patient --> UC4
+
+    Admin --> UC5
+    Admin --> UC6
+    Admin --> UC7
+    Admin --> UC8
+
+    UC7 -.-> UC9
+    UC8 -.-> UC9
+```
+
+### Class diagram
+
+```mermaid
+classDiagram
+    class Patient {
+        +string $id
+        +string userId
+        +string name
+        +string email
+        +string phone
+        +Date birthDate
+        +Gender gender
+        +string primaryPhysician
+        +string insurancePolicyNumber
+        +string identificationDocument
+        +boolean privacyConsent
+    }
+
+    class Appointment {
+        +string $id
+        +string userId
+        +Patient patient
+        +string primaryPhysician
+        +string reason
+        +Date schedule
+        +Status status
+        +string note
+        +string cancellationReason
+    }
+
+    class Doctor {
+        +string name
+        +string image
+    }
+
+    class Status {
+        <<enumeration>>
+        pending
+        scheduled
+        cancelled
+    }
+
+    class Gender {
+        <<enumeration>>
+        Male
+        Female
+        Other
+    }
+
+    Patient "1" --> "*" Appointment : books
+    Doctor "1" --> "*" Appointment : attends
+    Appointment --> Status
+    Patient --> Gender
+```
+
+### Component diagram
+
+```mermaid
+flowchart TB
+    subgraph Browser
+        UI[React Components]
+    end
+
+    subgraph "Next.js Server"
+        MW[Middleware]
+        Pages[App Router Pages]
+        Actions[Server Actions]
+        Auth[Auth Session Module]
+    end
+
+    subgraph Appwrite
+        DB[(Databases)]
+        Storage[(Storage Bucket)]
+        SMS[Messaging]
+    end
+
+    UI -->|HTTP request| MW
+    MW -->|verify session cookie| Auth
+    UI -->|invoke server action| Actions
+    Pages --> Actions
+    Pages -->|verify session| Auth
+    Actions -->|authorization check| Auth
+    Actions --> DB
+    Actions --> Storage
+    Actions --> SMS
+```
+
+### State diagram — appointment lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending : patient books
+    pending --> scheduled : admin confirms
+    pending --> cancelled : admin cancels
+    scheduled --> cancelled : patient or admin cancels
+    scheduled --> [*]
+    cancelled --> [*]
+```
+
+### Entity relationship diagram
+
+```mermaid
+erDiagram
+    PATIENT ||--o{ APPOINTMENT : books
+    DOCTOR ||--o{ APPOINTMENT : attends
+
+    PATIENT {
+        string id PK
+        string userId
+        string name
+        string email
+        string phone
+        date birthDate
+        string gender
+        string primaryPhysician
+        string insurancePolicyNumber
+        boolean privacyConsent
+    }
+
+    APPOINTMENT {
+        string id PK
+        string userId FK
+        string primaryPhysician
+        string reason
+        datetime schedule
+        string status
+        string note
+        string cancellationReason
+    }
+
+    DOCTOR {
+        string name
+        string image
+    }
+```
+
+### Sequence diagram — admin authentication
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin
+    participant MW as Middleware
+    participant Page as /admin
+    participant Action as authenticateAdmin
+    participant Jar as Session Cookie
+
+    Admin->>Page: GET /admin
+    Page->>MW: request passes through
+    MW->>Jar: read hcs_admin_session
+    alt cookie missing, tampered, or expired
+        MW-->>Admin: 307 redirect to /admin/login
+    else signature valid and unexpired
+        MW-->>Page: allow request
+        Page->>Jar: re-verify session
+        Page-->>Admin: render dashboard
+    end
+
+    Admin->>Action: submit passkey
+    Action->>Action: constant-time compare vs ADMIN_PASSKEY
+    alt mismatch
+        Action-->>Admin: invalid passkey
+    else match
+        Action->>Jar: set signed token (httpOnly, Secure, 8h)
+        Action-->>Admin: redirect /admin
+    end
+```
+
+### Sequence diagram — booking an appointment
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Patient
+    participant Form as AppointmentForm
+    participant Zod as getAppointmentSchema
+    participant Action as createAppointment
+    participant DB as Appwrite Appointments
+    participant SMS as Appwrite Messaging
+
+    Patient->>Form: submit booking form
+    Form->>Zod: validate fields
+    Zod-->>Form: parsed or field errors
+    Form->>Action: createAppointment(payload)
+    Action->>DB: createDocument status pending
+    DB-->>Action: appointment document
+    Action-->>Form: new appointment id
+    Form-->>Patient: redirect to confirmation page
+
+    Note over Action,SMS: SMS is sent later, when an admin schedules or cancels
+```
+
+### Sequence diagram — admin schedules and notifies
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin
+    participant MW as Middleware
+    participant Page as /admin
+    participant Action as updateAppointment
+    participant DB as Appwrite Appointments
+    participant SMS as Appwrite Messaging
+
+    Admin->>Page: GET /admin
+    MW-->>Page: session valid
+    Page->>Action: updateAppointment(id, status scheduled, timeZone)
+    Action->>Action: require admin session
+    Action->>DB: updateDocument
+    DB-->>Action: updated appointment
+    Action->>Action: format date in patient time zone
+    Action->>SMS: createSms(userId, message)
+    SMS-->>Action: delivered
+    Action-->>Page: revalidate /admin
+    Page-->>Admin: refreshed dashboard
+```
+
+> ⚠️ The `timeZone` sent from the client is **not** yet trusted or verified —
+> it originates in the browser. See [docs/security.md](docs/security.md).
+
 ## <a name="quick-start">🤸 Quick Start</a>
 
 Follow these steps to set up the project locally on your machine.
@@ -91,7 +360,7 @@ Make sure you have the following installed on your machine:
 **Cloning the Repository**
 
 ```bash
-git clone https://github.com/adrianhajdin/healthcare.git
+git clone https://github.com/ogc16/healthcaresystem.git
 cd healthcare
 ```
 
@@ -114,13 +383,18 @@ PROJECT_ID=
 API_KEY=
 DATABASE_ID=
 PATIENT_COLLECTION_ID=
+DOCTOR_COLLECTION_ID=
 APPOINTMENT_COLLECTION_ID=
 NEXT_PUBLIC_BUCKET_ID=
 
-NEXT_PUBLIC_ADMIN_PASSKEY=111111
+#ADMIN — server-side only, never prefix these with NEXT_PUBLIC_
+ADMIN_PASSKEY=
+SESSION_SECRET=
 ```
 
 Replace the placeholder values with your actual Appwrite credentials. You can obtain these credentials by signing up on the [Appwrite website](https://appwrite.io/).
+
+`ADMIN_PASSKEY` and `SESSION_SECRET` gate the admin dashboard and must **not** use the `NEXT_PUBLIC_` prefix — that would publish them to every visitor. See [docs/environment.md](docs/environment.md) and [docs/security.md](docs/security.md).
 
 **Running the Project**
 
@@ -222,7 +496,7 @@ export default config;
 </details>
 
 <details>
-<summary><code>app/globals.css</code></summary>
+<summary><code>src/app/globals.css</code></summary>
 
 ```css
 @tailwind base;
@@ -580,7 +854,7 @@ export default config;
 </details>
 
 <details>
-<summary><code>types/index.d.ts</code></summary>
+<summary><code>src/types/index.d.ts</code></summary>
 
 ```typescript
 /* eslint-disable no-unused-vars */
@@ -644,7 +918,7 @@ declare type UpdateAppointmentParams = {
 </details>
 
 <details>
-<summary><code>types/appwrite.types.ts</code></summary>
+<summary><code>src/types/appwrite.types.ts</code></summary>
 
 ```typescript
 import { Models } from "node-appwrite";
@@ -688,7 +962,7 @@ export interface Appointment extends Models.Document {
 </details>
 
 <details>
-<summary><code>lib/utils.ts</code></summary>
+<summary><code>src/lib/utils.ts</code></summary>
 
 ```typescript
 import { type ClassValue, clsx } from "clsx";
@@ -760,20 +1034,12 @@ export const formatDateTime = (dateString: Date | string) => {
     timeOnly: formattedTime,
   };
 };
-
-export function encryptKey(passkey: string) {
-  return btoa(passkey);
-}
-
-export function decryptKey(passkey: string) {
-  return atob(passkey);
-}
 ```
 
 </details>
 
 <details>
-<summary><code>lib/validation.ts</code></summary>
+<summary><code>src/lib/validation.ts</code></summary>
 
 ```typescript
 import { z } from "zod";
@@ -899,7 +1165,7 @@ export function getAppointmentSchema(type: string) {
 </details>
 
 <details>
-<summary><code>constants/index.ts</code></summary>
+<summary><code>src/constants/index.ts</code></summary>
 
 ```typescript
 export const GenderOptions = ["Male", "Female", "Other"];
@@ -994,27 +1260,8 @@ export const StatusIcon = {
 
 ## <a name="links">🔗 Assets</a>
 
-Public assets used in the project can be found [here](https://drive.google.com/file/d/1yGvWFeSaH1_-aiQ1gejT23lqz5979RKB/view?usp=sharing)
+All public assets are committed under `public/assets/` — icons in `public/assets/icons/`, images in `public/assets/images/`.
 
-## <a name="more">🚀 More</a>
+## <a name="contributing">🤝 Contributing</a>
 
-**Advance your skills with Next.js 14 Pro Course**
-
-Enjoyed creating this project? Dive deeper into our PRO courses for a richer learning adventure. They're packed with detailed explanations, cool features, and exercises to boost your skills. Give it a go!
-
-<a href="https://jsmastery.pro/next14" target="_blank">
-<img src="https://github.com/sujatagunale/EasyRead/assets/151519281/557837ce-f612-4530-ab24-189e75133c71" alt="Project Banner">
-</a>
-
-<br />
-<br />
-
-**Accelerate your professional journey with the Expert Training program**
-
-And if you're hungry for more than just a course and want to understand how we learn and tackle tech challenges, hop into our personalized masterclass. We cover best practices, different web skills, and offer mentorship to boost your confidence. Let's learn and grow together!
-
-<a href="https://www.jsmastery.pro/masterclass" target="_blank">
-<img src="https://github.com/sujatagunale/EasyRead/assets/151519281/fed352ad-f27b-400d-9b8f-c7fe628acb84" alt="Project Banner">
-</a>
-
-#
+Issues and pull requests are welcome. For security reports, see [docs/security.md](docs/security.md).
