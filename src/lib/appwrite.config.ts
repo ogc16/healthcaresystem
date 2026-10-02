@@ -11,14 +11,46 @@ export const {
   NEXT_PUBLIC_BUCKET_ID: BUCKET_ID,
 } = process.env;
 
-const client = new sdk.Client();
+/**
+ * Fails loudly, and by name.
+ *
+ * The previous version built both clients at module scope behind `!`
+ * assertions. That let a missing variable reach the SDK as `undefined`, where
+ * it surfaced as an opaque "Endpoint must be a valid string" from inside
+ * node-appwrite during `next build`, with nothing pointing at the actual cause.
+ * Worse, an unset `API_KEY` would have produced a client with no key attached,
+ * turning privileged calls into anonymous ones instead of failing.
+ *
+ * Construction is therefore deferred to first use and the missing name is
+ * reported directly.
+ */
+function requireEnv(name: string, value: string | undefined): string {
+  if (!value) {
+    throw new Error(
+      `Missing required environment variable ${name}. See .env.example.`
+    );
+  }
 
-client.setEndpoint(ENDPOINT!).setProject(PROJECT_ID!).setKey(API_KEY!);
+  return value;
+}
 
-export const databases = new sdk.Databases(client);
-export const users = new sdk.Users(client);
-export const messaging = new sdk.Messaging(client);
-export const storage = new sdk.Storage(client);
+let client: sdk.Client | undefined;
+
+/** Admin client. Carries the API key, so every call is a privileged one. */
+function getClient(): sdk.Client {
+  if (!client) {
+    client = new sdk.Client();
+
+    client
+      .setEndpoint(requireEnv("NEXT_PUBLIC_ENDPOINT", ENDPOINT))
+      .setProject(requireEnv("PROJECT_ID", PROJECT_ID))
+      .setKey(requireEnv("API_KEY", API_KEY));
+  }
+
+  return client;
+}
+
+let accountClient: sdk.Client | undefined;
 
 /**
  * Deliberately a separate client with no API key.
@@ -32,8 +64,26 @@ export const storage = new sdk.Storage(client);
  * session for any user straight from the API key, with no password check at
  * all. It is a server-side impersonation helper, not a sign-in path.
  */
-const accountClient = new sdk.Client();
+function getAccountClient(): sdk.Client {
+  if (!accountClient) {
+    accountClient = new sdk.Client();
 
-accountClient.setEndpoint(ENDPOINT!).setProject(PROJECT_ID!);
+    // No .setKey() here, by design. See above.
+    accountClient
+      .setEndpoint(requireEnv("NEXT_PUBLIC_ENDPOINT", ENDPOINT))
+      .setProject(requireEnv("PROJECT_ID", PROJECT_ID));
+  }
 
-export const account = new sdk.Account(accountClient);
+  return accountClient;
+}
+
+export const getDatabases = (): sdk.Databases =>
+  new sdk.Databases(getClient());
+
+export const getUsers = (): sdk.Users => new sdk.Users(getClient());
+
+export const getMessaging = (): sdk.Messaging => new sdk.Messaging(getClient());
+
+export const getStorage = (): sdk.Storage => new sdk.Storage(getClient());
+
+export const getAccount = (): sdk.Account => new sdk.Account(getAccountClient());

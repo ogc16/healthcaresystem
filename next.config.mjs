@@ -1,4 +1,8 @@
-import { withSentryConfig } from "@sentry/nextjs";
+// @sentry/nextjs v11 re-exports withSentryConfig from a dedicated "./config"
+// subpath. The root entry stays CJS for the Next.js server bundle, so importing
+// it here fails under Node's ESM loader with "Named export 'withSentryConfig'
+// not found". Import the build-time entry directly instead.
+import { withSentryConfig } from "@sentry/nextjs/config";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {

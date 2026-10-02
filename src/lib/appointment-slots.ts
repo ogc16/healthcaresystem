@@ -5,7 +5,7 @@ import type { Appointment } from "@/types/appwrite.types";
 import {
   APPOINTMENT_COLLECTION_ID,
   DATABASE_ID,
-  databases,
+  getDatabases,
 } from "./appwrite.config";
 
 export const APPOINTMENT_DURATION_MINUTES = 30;
@@ -60,7 +60,7 @@ export const findScheduleConflict = async ({
     throw new Error("Invalid appointment date");
   }
 
-  const { documents } = await databases.listDocuments(
+  const { documents } = await getDatabases().listDocuments<Appointment>(
     DATABASE_ID!,
     APPOINTMENT_COLLECTION_ID!,
     [
@@ -74,7 +74,7 @@ export const findScheduleConflict = async ({
     ]
   );
 
-  const conflict = (documents as Appointment[]).find((appointment) => {
+  const conflict = documents.find((appointment) => {
     if (appointment.$id === excludeAppointmentId) return false;
 
     return hasSlotOverlap(appointment.schedule, requestedAt);

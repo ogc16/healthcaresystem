@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ID } from "node-appwrite";
 
-import { account, users } from "../appwrite.config";
+import { getAccount, getUsers } from "../appwrite.config";
 import { getSession } from "../auth/guards";
 import { safeReturnPath } from "../auth/return-path";
 import {
@@ -26,7 +26,7 @@ import { LoginSchema, PatientAccountSchema } from "../validation";
  * session for an account they created with someone else's email.
  */
 const createUser = async (user: CreateUserParams) => {
-  const newUser = await users.create(
+  const newUser = await getUsers().create(
     ID.unique(),
     user.email,
     user.phone,
@@ -54,7 +54,10 @@ const cookieOptions = (maxAge: number) => ({
  * happens in Appwrite rather than being reimplemented here.
  */
 const issuePatientSession = async (email: string, password: string) => {
-  const session = await account.createEmailPasswordSession(email, password);
+  const session = await getAccount().createEmailPasswordSession(
+    email,
+    password
+  );
   const maxAge = patientSessionMaxAge();
   const store = await cookies();
 
@@ -133,7 +136,10 @@ export const logoutPatient = async () => {
 
   if (session?.role === "patient" && session.appwriteSessionId && session.userId) {
     try {
-      await users.deleteSession(session.userId, session.appwriteSessionId);
+      await getUsers().deleteSession(
+        session.userId,
+        session.appwriteSessionId
+      );
     } catch (error) {
       // The cookie is cleared either way; a failure upstream only means the
       // Appwrite session lingers until it expires.

@@ -9,8 +9,8 @@ import { assertNoScheduleConflict } from "../appointment-slots";
 import {
   APPOINTMENT_COLLECTION_ID,
   DATABASE_ID,
-  databases,
-  messaging,
+  getDatabases,
+  getMessaging,
 } from "../appwrite.config";
 import {
   assertCanActForPatient,
@@ -41,7 +41,7 @@ export const createAppointment = async (
   });
 
   try {
-    const newAppointment = await databases.createDocument(
+    const newAppointment = await getDatabases().createDocument(
       DATABASE_ID!,
       APPOINTMENT_COLLECTION_ID!,
       ID.unique(),
@@ -62,7 +62,7 @@ export const getRecentAppointmentList = async () => {
   }
 
   try {
-    const appointments = await databases.listDocuments(
+    const appointments = await getDatabases().listDocuments<Appointment>(
       DATABASE_ID!,
       APPOINTMENT_COLLECTION_ID!,
       [Query.orderDesc("$createdAt")]
@@ -94,7 +94,7 @@ export const getRecentAppointmentList = async () => {
       cancelledCount: 0,
     };
 
-    const counts = (appointments.documents as Appointment[]).reduce(
+    const counts = appointments.documents.reduce(
       (acc, appointment) => {
         switch (appointment.status) {
           case "scheduled":
@@ -142,7 +142,7 @@ export const getRecentAppointmentList = async () => {
 const sendSMSNotification = async (userId: string, content: string) => {
   try {
     // https://appwrite.io/docs/references/1.5.x/server-nodejs/messaging#createSms
-    const message = await messaging.createSms(
+    const message = await getMessaging().createSms(
       ID.unique(),
       content,
       [],
@@ -171,7 +171,7 @@ export const updateAppointment = async ({
 
   // Ownership is checked against the stored record, not the payload, so a
   // caller cannot claim someone else's appointment by echoing their userId.
-  const existing = (await databases.getDocument(
+  const existing = (await getDatabases().getDocument(
     DATABASE_ID!,
     APPOINTMENT_COLLECTION_ID!,
     appointmentId
@@ -190,7 +190,7 @@ export const updateAppointment = async ({
 
   try {
     // Update appointment to scheduled -> https://appwrite.io/docs/references/cloud/server-nodejs/databases#updateDocument
-    const updatedAppointment = await databases.updateDocument(
+    const updatedAppointment = await getDatabases().updateDocument(
       DATABASE_ID!,
       APPOINTMENT_COLLECTION_ID!,
       appointmentId,
@@ -219,7 +219,7 @@ export const getAppointment = async (appointmentId: string) => {
   if (!session) throw new Error("Unauthorized: sign in required");
 
   try {
-    const appointment = (await databases.getDocument(
+    const appointment = (await getDatabases().getDocument(
       DATABASE_ID!,
       APPOINTMENT_COLLECTION_ID!,
       appointmentId
