@@ -1,9 +1,13 @@
 "use client";
 
 import Image from "next/image";
-import React, { useCallback } from "react";
-import { useDropzone } from "react-dropzone";
+import React, { useCallback, useState } from "react";
+import { FileRejection, useDropzone } from "react-dropzone";
 
+import {
+  ALLOWED_UPLOAD_EXTENSIONS,
+  MAX_UPLOAD_MEGABYTES,
+} from "@/lib/uploads";
 import { convertFileToUrl } from "@/lib/utils";
 
 type FileUploaderProps = {
@@ -11,12 +15,42 @@ type FileUploaderProps = {
   onChange: (files: File[]) => void;
 };
 
+const describeRejection = (rejection: FileRejection) => {
+  if (rejection.errors.some((error) => error.code === "file-too-large")) {
+    return `That file is larger than the ${MAX_UPLOAD_MEGABYTES}MB limit.`;
+  }
+
+  return `Only ${ALLOWED_UPLOAD_EXTENSIONS.join(", ")} files are accepted.`;
+};
+
 export const FileUploader = ({ files, onChange }: FileUploaderProps) => {
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    onChange(acceptedFiles);
+  const [error, setError] = useState("");
+
+  const onDrop = useCallback(
+    (acceptedFiles: File[]) => {
+      setError("");
+      onChange(acceptedFiles);
+    },
+    [onChange]
+  );
+
+  const onDropRejected = useCallback((fileRejections: FileRejection[]) => {
+    setError(describeRejection(fileRejections[0]));
   }, []);
 
-  const { getRootProps, getInputProps } = useDropzone({ onDrop });
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    onDropRejected,
+    accept: {
+      "application/pdf": ALLOWED_UPLOAD_EXTENSIONS.filter((ext) => ext === ".pdf"),
+      "image/jpeg": ALLOWED_UPLOAD_EXTENSIONS.filter((ext) =>
+        [".jpg", ".jpeg"].includes(ext)
+      ),
+      "image/png": ALLOWED_UPLOAD_EXTENSIONS.filter((ext) => ext === ".png"),
+    },
+    maxSize: MAX_UPLOAD_MEGABYTES * 1024 * 1024,
+    multiple: false,
+  });
 
   return (
     <div {...getRootProps()} className="file-upload">
@@ -26,7 +60,7 @@ export const FileUploader = ({ files, onChange }: FileUploaderProps) => {
           src={convertFileToUrl(files[0])}
           width={1000}
           height={1000}
-          alt="uploaded image"
+          alt="uploaded document"
           className="max-h-[400px] overflow-hidden object-cover"
         />
       ) : (
@@ -43,11 +77,18 @@ export const FileUploader = ({ files, onChange }: FileUploaderProps) => {
               or drag and drop
             </p>
             <p className="text-12-regular">
-              SVG, PNG, JPG or GIF (max. 800x400px)
+              {ALLOWED_UPLOAD_EXTENSIONS.join(", ").toUpperCase()} (max{" "}
+              {MAX_UPLOAD_MEGABYTES}MB)
             </p>
           </div>
         </>
       )}
+
+      {error ? (
+        <p className="shad-error text-12-regular mt-2">{error}</p>
+      ) : isDragActive ? (
+        <p className="text-12-regular mt-2 text-green-500">Drop the file here</p>
+      ) : null}
     </div>
   );
 };

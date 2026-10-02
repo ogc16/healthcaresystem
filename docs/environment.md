@@ -51,8 +51,34 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 
 Referenced in `next.config.mjs`.
 
+## Appwrite collection setup
+
+Beyond the variables above, the appointments collection needs indexes. The
+conflict check in `src/lib/appointment-slots.ts` filters on three attributes,
+and Appwrite rejects range queries against an unindexed attribute:
+
+| Attribute | Index type | Why |
+| --- | --- | --- |
+| `primaryPhysician` | `key` | Equality filter for the doctor being booked |
+| `schedule` | `key` | `Query.between` window for overlap detection |
+| `status` | `key` | `Query.notEqual("status", "cancelled")` |
+
+Without these, booking fails at runtime with an index error rather than at build
+time.
+
 ## Sentry
 
-Sentry is configured in `next.config.mjs` with `org: "javascript-mastery"` and
-`project: "care-pulse"`. To send errors to your own Sentry project, change those
-two values and set `SENTRY_AUTH_TOKEN` in your build environment.
+Sentry is configured in `next.config.mjs`:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SENTRY_ORG` | `carepulse` | Sentry organization slug |
+| `SENTRY_PROJECT` | `care-pulse` | Sentry project slug |
+| `SENTRY_AUTH_TOKEN` | — | Required to upload source maps |
+
+Source maps only upload when `SENTRY_AUTH_TOKEN` is present, so builds succeed
+without it — errors simply lack stack traces.
+
+> This previously hardcoded `org: "javascript-mastery"`, a leftover from the
+> upstream tutorial this project was forked from. Override `SENTRY_ORG` with
+> your own slug.

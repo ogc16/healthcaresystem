@@ -116,3 +116,18 @@ export function getAppointmentSchema(type: string) {
       return ScheduleAppointmentSchema;
   }
 }
+
+/**
+ * Guards against a garbage or hostile `timeZone` reaching `formatDateTime`,
+ * which throws a RangeError on an unknown identifier. This only proves the
+ * value names a real zone — it does not prove the caller *is* in that zone.
+ */
+export function isValidTimeZone(timeZone: string) {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", { timeZone });
+
+    return typeof formatter.format() === "string";
+  } catch {
+    return false;
+  }
+}

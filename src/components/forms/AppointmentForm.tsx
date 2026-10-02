@@ -37,6 +37,7 @@ export const AppointmentForm = ({
 }) => {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [formError, setFormError] = useState("");
 
   const AppointmentFormValidation = getAppointmentSchema(type);
 
@@ -57,6 +58,7 @@ export const AppointmentForm = ({
     values: z.infer<typeof AppointmentFormValidation>
   ) => {
     setIsLoading(true);
+    setFormError("");
 
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -114,7 +116,11 @@ export const AppointmentForm = ({
         }
       }
     } catch (error) {
-      console.log(error);
+      setFormError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong. Please try again."
+      );
     }
     setIsLoading(false);
   };
@@ -209,6 +215,10 @@ export const AppointmentForm = ({
             label="Reason for cancellation"
             placeholder="Urgent meeting came up"
           />
+        )}
+
+        {formError && (
+          <p className="shad-error text-14-regular">{formError}</p>
         )}
 
         <SubmitButton

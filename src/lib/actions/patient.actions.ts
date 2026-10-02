@@ -12,6 +12,7 @@ import {
   storage,
   users,
 } from "../appwrite.config";
+import { UploadValidationError, validateUpload } from "../uploads";
 import { parseStringify } from "../utils";
 
 // CREATE APPWRITE USER
@@ -59,29 +60,34 @@ export const registerPatient = async ({
   identificationDocument,
   ...patient
 }: RegisterUserParams) => {
-  try {
-    // Upload file ->  // https://appwrite.io/docs/references/cloud/client-web/storage#createFile
-    let file;
-    if (identificationDocument) {
-      const inputFile =
-        identificationDocument &&
-        InputFile.fromBlob(
-          identificationDocument?.get("blobFile") as Blob,
-          identificationDocument?.get("fileName") as string
-        );
+  // Upload file ->  // https://appwrite.io/docs/references/cloud/client-web/storage#createFile
+  let file;
 
-      file = await storage.createFile(BUCKET_ID!, ID.unique(), inputFile);
+  if (identificationDocument) {
+    const blob = identificationDocument.get("blobFile") as Blob | null;
+    const fileName = identificationDocument.get("fileName") as string | null;
+
+    if (!blob || !fileName) {
+      throw new UploadValidationError("The identification document is missing.");
     }
 
+    await validateUpload(blob, fileName);
+
+    const inputFile = InputFile.fromBlob(blob, fileName);
+
+    file = await storage.createFile(BUCKET_ID!, ID.unique(), inputFile);
+  }
+
+  try {
     // Create new patient document -> https://appwrite.io/docs/references/cloud/server-nodejs/databases#createDocument
     const newPatient = await databases.createDocument(
       DATABASE_ID!,
       PATIENT_COLLECTION_ID!,
       ID.unique(),
       {
-        identificationDocumentId: file?.$id ? file.$id : null,
+        identificationDocumentId: file?.$id ?? null,
         identificationDocumentUrl: file?.$id
-          ? `${ENDPOINT}/storage/buckets/${BUCKET_ID}/files/${file.$id}/view??project=${PROJECT_ID}`
+          ? `${ENDPOINT}/storage/buckets/${BUCKET_ID}/files/${file.$id}/view?project=${PROJECT_ID}`
           : null,
         ...patient,
       }

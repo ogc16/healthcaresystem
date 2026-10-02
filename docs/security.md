@@ -50,6 +50,71 @@ The previous implementation had no server-side gate at all:
 > **Deployment note:** remove `NEXT_PUBLIC_ADMIN_PASSKEY` from your hosting
 > environment. Set `ADMIN_PASSKEY` and `SESSION_SECRET` instead.
 
+## Upload validation
+
+Identification documents are user-supplied binaries stored in a shared Appwrite
+bucket, so both the extension and the contents are attacker-controlled.
+
+`src/lib/uploads.ts` validates server-side, inside `registerPatient`, **before**
+the file reaches Appwrite:
+
+| Check | Rule |
+| --- | --- |
+| Extension | `.pdf`, `.jpg`, `.jpeg`, `.png` |
+| Size | 1 byte – 5 MB (`MAX_UPLOAD_BYTES`) |
+| Content | Magic-byte signature must match the extension |
+
+The signature test is the load-bearing one. A browser-supplied `blob.type` is
+whatever the client claims, and a `.jpg` extension proves nothing about the
+bytes behind it. `detectMimeType` reads the first 12 bytes and compares them
+against the known headers for PDF (`%PDF`), PNG, and JPEG.
+
+Extensions are bound to exactly one content type rather than checked against two
+independent allowlists. Without that binding a real PDF named `id.png` satisfies
+both lists individually and is then stored and served under an image name —
+content-type confusion in the browser and in Appwrite's CDN.
+
+`src/components/FileUploader.tsx` applies the same limits via `useDropzone`
+(`accept`, `maxSize`) and reports rejections inline. That is convenience only;
+the server check is the one that actually holds, since the browser can be
+bypassed by calling the action directly.
+
+> The upload is still stored in a bucket whose visibility is Appwrite-side
+> configuration, not application code. Confirm the bucket's permissions in the
+> Appwrite console before storing real identity documents.
+
+## Booking integrity
+
+`createAppointment` and `updateAppointment` (when scheduling, not cancelling)
+call `assertNoScheduleConflict` in `src/lib/appointment-slots.ts`.
+
+A doctor is considered double-booked when an existing non-cancelled
+appointment starts less than `APPOINTMENT_DURATION_MINUTES` (30) before or
+after the requested time. Cancelled appointments release their slot. The
+conflicting booking is surfaced to the user as a `ScheduleConflictError`.
+
+Appwrite's `Query.between` is inclusive on both bounds, so it is used only as a
+±30-minute pre-filter; the exact overlap test runs in JS via `hasSlotOverlap`.
+
+Rejections are race-prone by nature — two concurrent requests can both pass the
+check before either is written. Closing that requires an Appwrite unique
+compound index on `(primaryPhysician, schedule)`, which would reject the
+duplicate at write time instead.
+
+> **Required Appwrite setup:** these queries filter on `primaryPhysician`,
+> `schedule`, and `status`. Appwrite rejects range queries against an unindexed
+> attribute, so the appointments collection needs `key` indexes on all three or
+> booking will fail at runtime with an index error.
+
+### Time zone is still client-asserted
+
+`updateAppointment` validates that `timeZone` names a real IANA zone before it
+reaches `formatDateTime`, which throws a `RangeError` on an unknown identifier.
+That stops garbage input; it does **not** prove the caller is in that zone. The
+value still originates in the browser. It is used only to format the SMS
+reminder, so it is cosmetic — it must not gate anything security-relevant until
+patient authentication exists (gap 2).
+
 ## Open gaps
 
 None of these are fixed yet. All require patient-level authentication first.
@@ -63,7 +128,7 @@ they are publicly callable endpoints:
 | --- | --- |
 | `getAppointment(id)` | No ownership check — any caller can read any appointment by guessing or leaking an ID. |
 | `updateAppointment(...)` | No ownership check — a caller can reschedule or cancel *any* appointment, and triggers an SMS as a side effect. |
-| `createAppointment(...)` | Open by design (patient booking), but unvalidated. |
+| `createAppointment(...)` | Open by design (patient booking), but unvalidated. Slot conflicts are now checked — see [Booking integrity](#booking-integrity). |
 
 Enforcement requires a patient session and a `document.userId === session.userId`
 comparison.
@@ -82,17 +147,16 @@ Appwrite label, ownership enforced in the action layer.
 Nothing records who viewed or modified a record. Required before this handles
 real PHI.
 
-### 4. No upload validation
-
-`src/components/FileUploader.tsx` calls `useDropzone({ onDrop })` with no
-`accept`, no `maxSize`, and no server-side MIME sniffing. The UI hint says
-"SVG, PNG, JPG or GIF" but nothing enforces it.
-
-### 5. Passkey is a single shared secret
+### 4. Passkey is a single shared secret
 
 One value for all admins, no per-admin identity, no rate limiting or lockout on
 `/admin/login`. Six digits is ~10^6 combinations and is brute-forceable unless
 rate-limited at the edge.
+
+### 5. No rate limiting on booking or registration
+
+`createAppointment` and `registerPatient` are unauthenticated and unbounded, so
+they can be used to exhaust the messaging quota or fill the storage bucket.
 
 ## Reporting
 

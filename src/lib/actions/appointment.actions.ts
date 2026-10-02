@@ -5,6 +5,7 @@ import { ID, Query } from "node-appwrite";
 
 import { Appointment } from "@/types/appwrite.types";
 
+import { assertNoScheduleConflict } from "../appointment-slots";
 import {
   APPOINTMENT_COLLECTION_ID,
   DATABASE_ID,
@@ -13,11 +14,17 @@ import {
 } from "../appwrite.config";
 import { isAdminSession } from "../auth/guards";
 import { formatDateTime, parseStringify } from "../utils";
+import { isValidTimeZone } from "../validation";
 
 //  CREATE APPOINTMENT
 export const createAppointment = async (
   appointment: CreateAppointmentParams
 ) => {
+  await assertNoScheduleConflict({
+    primaryPhysician: appointment.primaryPhysician,
+    schedule: appointment.schedule,
+  });
+
   try {
     const newAppointment = await databases.createDocument(
       DATABASE_ID!,
@@ -129,6 +136,19 @@ export const updateAppointment = async ({
   appointment,
   type,
 }: UpdateAppointmentParams) => {
+  if (!isValidTimeZone(timeZone)) {
+    throw new Error(`Invalid time zone: ${timeZone}`);
+  }
+
+  // Only a confirmed booking claims a slot; cancellations must never be blocked.
+  if (appointment.status === "scheduled") {
+    await assertNoScheduleConflict({
+      primaryPhysician: appointment.primaryPhysician,
+      schedule: appointment.schedule!,
+      excludeAppointmentId: appointmentId,
+    });
+  }
+
   try {
     // Update appointment to scheduled -> https://appwrite.io/docs/references/cloud/server-nodejs/databases#updateDocument
     const updatedAppointment = await databases.updateDocument(

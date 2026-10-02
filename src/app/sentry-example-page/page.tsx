@@ -67,11 +67,7 @@ export default function Page() {
         </button>
 
         <p>
-          Next, look for the error on the{" "}
-          <a href="https://javascript-mastery.sentry.io/issues/?project=4507458386526208">
-            Issues Page
-          </a>
-          .
+          Next, look for the error on your Sentry project&apos;s Issues page.
         </p>
         <p style={{ marginTop: "24px" }}>
           For more information, see{" "}
