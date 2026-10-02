@@ -7,7 +7,7 @@ import {
   ADMIN_SESSION_COOKIE,
   adminSessionMaxAge,
   constantTimeEqual,
-  createAdminSessionToken,
+  createSessionToken,
 } from "@/lib/auth/session";
 
 export const authenticateAdmin = async (formData: FormData) => {
@@ -21,10 +21,9 @@ export const authenticateAdmin = async (formData: FormData) => {
   }
 
   const maxAge = adminSessionMaxAge();
-  const expiresAt = Math.floor(Date.now() / 1000) + maxAge;
   const store = await cookies();
 
-  store.set(ADMIN_SESSION_COOKIE, await createAdminSessionToken(expiresAt), {
+  store.set(ADMIN_SESSION_COOKIE, await createSessionToken("admin", {}, maxAge), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

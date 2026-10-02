@@ -25,9 +25,11 @@ Browser
 Two layers protect `/admin`, deliberately:
 
 1. **Middleware** (`src/middleware.ts`) rejects unauthenticated requests at the
-   edge, before any Appwrite query runs. Matcher is
-   `["/admin", "/admin/((?!login).*)"]`, which covers `/admin` and every
-   sub-route except `/admin/login`.
+   edge for the routes in
+   `["/admin", "/admin/((?!login).*)", "/patients/:path*"]`, which covers
+   `/admin` and every sub-route except `/admin/login`, plus the whole patient
+   portal. Admin routes require an admin cookie; patient routes require a
+   patient cookie, so neither session can be replayed against the other's area.
 2. **Page guard** (`src/app/admin/page.tsx`) re-checks the session and
    redirects. Middleware alone would be a single point of failure.
 
@@ -37,9 +39,22 @@ forgets its guard.
 
 ## Authentication
 
-There is no patient authentication. Patients are addressed by the `[userId]`
-route param only. The only authenticated surface is the admin dashboard —
-see [security.md](security.md).
+Two independent surfaces, each gated by its own cookie and both signed with
+`SESSION_SECRET`:
+
+- **Admin** — a shared passkey verified server-side, issuing the
+  `hcs_admin_session` cookie.
+- **Patient** — Appwrite email/password, verified by Appwrite, issuing the
+  `hcs_patient_session` cookie carrying the user's `uid` and Appwrite session id.
+
+The token shape is `<role>.<base64url(payload)>.<hmac>` and the role is inside the
+signed region, so a patient cookie cannot be replayed as an admin cookie or the
+reverse. Patient routes carry **no** identity parameter — the session is the only
+source of who the caller is, which is why ownership checks compare against the
+session rather than a request body.
+
+See [security.md](security.md) for the full model, the enforcement table, and the
+open gaps.
 
 ## Data access
 
@@ -54,9 +69,11 @@ whole collection. See the open gaps in [security.md](security.md).
 
 ## Scheduled/generated routes
 
-- `/` — patient registration form (static)
-- `/patients/[userId]/register` — patient onboarding
-- `/patients/[userId]/new-appointment` — booking and rescheduling
+- `/` — patient account creation (public)
+- `/login` — patient sign-in (public)
+- `/patients/register` — patient onboarding, session-derived identity
+- `/patients/new-appointment` — booking
+- `/patients/new-appointment/success` — confirmation, ownership-checked
 - `/admin` — dashboard, guarded
 - `/admin/login` — passkey entry, public
 - `/api/sentry-example-api` — Sentry demo route handler

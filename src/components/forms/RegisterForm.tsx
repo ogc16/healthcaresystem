@@ -59,8 +59,9 @@ const RegisterForm = ({ user }: { user: User }) => {
     }
 
     try {
+      // No userId here: the server derives it from the session, so a tampered
+      // payload cannot file this record under another account.
       const patient = {
-        userId: user.$id,
         name: values.name,
         email: values.email,
         phone: values.phone,
@@ -88,7 +89,7 @@ const RegisterForm = ({ user }: { user: User }) => {
       const newPatient = await registerPatient(patient);
 
       if (newPatient) {
-        router.push(`/patients/${user.$id}/new-appointment`);
+        router.push("/patients/new-appointment");
       }
     } catch (error) {
       console.log(error);

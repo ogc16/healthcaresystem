@@ -12,7 +12,11 @@ import {
   databases,
   messaging,
 } from "../appwrite.config";
-import { isAdminSession } from "../auth/guards";
+import {
+  assertCanActForPatient,
+  getSession,
+  isAdminSession,
+} from "../auth/guards";
 import { formatDateTime, parseStringify } from "../utils";
 import { isValidTimeZone } from "../validation";
 
@@ -20,6 +24,17 @@ import { isValidTimeZone } from "../validation";
 export const createAppointment = async (
   appointment: CreateAppointmentParams
 ) => {
+  const session = await getSession();
+
+  if (!session) throw new Error("Unauthorized: sign in required");
+
+  // A patient books under their own id. An admin books on someone's behalf, so
+  // the payload's userId is only trusted for that role.
+  const ownerUserId =
+    session.role === "admin" ? appointment.userId : session.userId;
+
+  if (!ownerUserId) throw new Error("Unauthorized: no patient identity");
+
   await assertNoScheduleConflict({
     primaryPhysician: appointment.primaryPhysician,
     schedule: appointment.schedule,
@@ -30,7 +45,7 @@ export const createAppointment = async (
       DATABASE_ID!,
       APPOINTMENT_COLLECTION_ID!,
       ID.unique(),
-      appointment
+      { ...appointment, userId: ownerUserId }
     );
 
     revalidatePath("/admin");
@@ -113,7 +128,18 @@ export const getRecentAppointmentList = async () => {
 };
 
 //  SEND SMS NOTIFICATION
-export const sendSMSNotification = async (userId: string, content: string) => {
+/**
+ * Module-private on purpose.
+ *
+ * Every export in a `"use server"` file is a network-reachable endpoint. While
+ * this one was exported, anyone could post an arbitrary `userId` and `content`
+ * and have the app send SMS to that user — a messaging-abuse and cost vector
+ * that bypassed the ownership checks on the surrounding actions entirely.
+ *
+ * Only `updateAppointment` may send SMS, and only to the stored owner of the
+ * appointment it just updated.
+ */
+const sendSMSNotification = async (userId: string, content: string) => {
   try {
     // https://appwrite.io/docs/references/1.5.x/server-nodejs/messaging#createSms
     const message = await messaging.createSms(
@@ -131,14 +157,27 @@ export const sendSMSNotification = async (userId: string, content: string) => {
 //  UPDATE APPOINTMENT
 export const updateAppointment = async ({
   appointmentId,
-  userId,
   timeZone,
   appointment,
   type,
 }: UpdateAppointmentParams) => {
+  const session = await getSession();
+
+  if (!session) throw new Error("Unauthorized: sign in required");
+
   if (!isValidTimeZone(timeZone)) {
     throw new Error(`Invalid time zone: ${timeZone}`);
   }
+
+  // Ownership is checked against the stored record, not the payload, so a
+  // caller cannot claim someone else's appointment by echoing their userId.
+  const existing = (await databases.getDocument(
+    DATABASE_ID!,
+    APPOINTMENT_COLLECTION_ID!,
+    appointmentId
+  )) as Appointment;
+
+  assertCanActForPatient(session, existing.userId);
 
   // Only a confirmed booking claims a slot; cancellations must never be blocked.
   if (appointment.status === "scheduled") {
@@ -161,7 +200,10 @@ export const updateAppointment = async ({
     if (!updatedAppointment) throw Error;
 
     const smsMessage = `Greetings from CarePulse. ${type === "schedule" ? `Your appointment is confirmed for ${formatDateTime(appointment.schedule!, timeZone).dateTime} with Dr. ${appointment.primaryPhysician}` : `We regret to inform that your appointment for ${formatDateTime(appointment.schedule!, timeZone).dateTime} is cancelled. Reason:  ${appointment.cancellationReason}`}.`;
-    await sendSMSNotification(userId, smsMessage);
+
+    // Recipient is the record's owner. Taking it from the payload let any caller
+    // send SMS to an arbitrary user id.
+    await sendSMSNotification(existing.userId, smsMessage);
 
     revalidatePath("/admin");
     return parseStringify(updatedAppointment);
@@ -172,18 +214,21 @@ export const updateAppointment = async ({
 
 // GET APPOINTMENT
 export const getAppointment = async (appointmentId: string) => {
+  const session = await getSession();
+
+  if (!session) throw new Error("Unauthorized: sign in required");
+
   try {
-    const appointment = await databases.getDocument(
+    const appointment = (await databases.getDocument(
       DATABASE_ID!,
       APPOINTMENT_COLLECTION_ID!,
       appointmentId
-    );
+    )) as Appointment;
+
+    assertCanActForPatient(session, appointment.userId);
 
     return parseStringify(appointment);
   } catch (error) {
-    console.error(
-      "An error occurred while retrieving the existing patient:",
-      error
-    );
+    console.error("An error occurred while retrieving the appointment:", error);
   }
 };

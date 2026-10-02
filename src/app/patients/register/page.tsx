@@ -2,13 +2,19 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 
 import RegisterForm from "@/components/forms/RegisterForm";
+import { PatientLogoutButton } from "@/components/PatientLogoutButton";
 import { getPatient, getUser } from "@/lib/actions/patient.actions";
+import { requirePatient } from "@/lib/auth/guards";
 
-const Register = async ({ params: { userId } }: SearchParamProps) => {
-  const user = await getUser(userId);
-  const patient = await getPatient(userId);
+const Register = async () => {
+  await requirePatient();
 
-  if (patient) redirect(`/patients/${userId}/new-appointment`);
+  // Both reads are keyed on the session's userId, never on a URL param.
+  const [patient, user] = await Promise.all([getPatient(), getUser()]);
+
+  if (patient) redirect("/patients/new-appointment");
+
+  if (!user) redirect("/login");
 
   return (
     <div className="flex h-screen max-h-screen">
@@ -23,6 +29,10 @@ const Register = async ({ params: { userId } }: SearchParamProps) => {
           />
 
           <RegisterForm user={user} />
+
+          <div className="flex justify-end">
+            <PatientLogoutButton />
+          </div>
 
           <p className="copyright py-12">© 2024 CarePluse</p>
         </div>

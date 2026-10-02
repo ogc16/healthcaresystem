@@ -12,37 +12,22 @@ import {
   storage,
   users,
 } from "../appwrite.config";
+import { requirePatient } from "../auth/guards";
 import { UploadValidationError, validateUpload } from "../uploads";
 import { parseStringify } from "../utils";
 
-// CREATE APPWRITE USER
-export const createUser = async (user: CreateUserParams) => {
-  try {
-    // Create new user -> https://appwrite.io/docs/references/1.5.x/server-nodejs/users#create
-    const newuser = await users.create(
-      ID.unique(),
-      user.email,
-      user.phone,
-      undefined,
-      user.name
-    );
-
-    return parseStringify(newuser);
-  } catch (error: any) {
-    // Check existing user
-    if (error && error?.code === 409) {
-      const existingUser = await users.list([
-        Query.equal("email", [user.email]),
-      ]);
-
-      return existingUser.users[0];
-    }
-    console.error("An error occurred while creating a new user:", error);
-  }
-};
-
 // GET USER
-export const getUser = async (userId: string) => {
+/**
+ * Resolves the caller's own Appwrite account.
+ *
+ * This has no userId parameter on purpose. As a `"use server"` export it is
+ * reachable over the network, so a parameter would let any caller enumerate
+ * another patient's name, email and phone number. The subject comes from the
+ * signed session instead.
+ */
+export const getUser = async () => {
+  const { userId } = await requirePatient();
+
   try {
     const user = await users.get(userId);
 
@@ -60,6 +45,10 @@ export const registerPatient = async ({
   identificationDocument,
   ...patient
 }: RegisterUserParams) => {
+  // Identity comes from the session, never from the payload. Spreading `patient`
+  // first and appending `userId` means a caller-supplied userId cannot win.
+  const { userId } = await requirePatient();
+
   // Upload file ->  // https://appwrite.io/docs/references/cloud/client-web/storage#createFile
   let file;
 
@@ -90,6 +79,7 @@ export const registerPatient = async ({
           ? `${ENDPOINT}/storage/buckets/${BUCKET_ID}/files/${file.$id}/view?project=${PROJECT_ID}`
           : null,
         ...patient,
+        userId,
       }
     );
 
@@ -100,7 +90,9 @@ export const registerPatient = async ({
 };
 
 // GET PATIENT
-export const getPatient = async (userId: string) => {
+export const getPatient = async () => {
+  const { userId } = await requirePatient();
+
   try {
     const patients = await databases.listDocuments(
       DATABASE_ID!,

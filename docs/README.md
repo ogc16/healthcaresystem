@@ -3,7 +3,7 @@
 | Doc | Contents |
 | --- | --- |
 | [architecture.md](architecture.md) | Directory layout, request flow, data access |
-| [security.md](security.md) | Admin auth model, middleware, known open gaps |
+| [security.md](security.md) | Admin and patient auth model, middleware, known open gaps |
 | [environment.md](environment.md) | Every environment variable and what it grants |
 
 ## Quick start

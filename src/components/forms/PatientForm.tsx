@@ -1,13 +1,12 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { Form } from "@/components/ui/form";
-import { createUser } from "@/lib/actions/patient.actions";
+import { createPatientAccount } from "@/lib/actions/auth.actions";
 import { UserFormValidation } from "@/lib/validation";
 
 import "react-phone-number-input/style.css";
@@ -15,8 +14,8 @@ import CustomFormField, { FormFieldType } from "../CustomFormField";
 import SubmitButton from "../SubmitButton";
 
 export const PatientForm = () => {
-  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [formError, setFormError] = useState("");
 
   const form = useForm<z.infer<typeof UserFormValidation>>({
     resolver: zodResolver(UserFormValidation),
@@ -24,26 +23,28 @@ export const PatientForm = () => {
       name: "",
       email: "",
       phone: "",
+      password: "",
+      confirmPassword: "",
     },
   });
 
   const onSubmit = async (values: z.infer<typeof UserFormValidation>) => {
     setIsLoading(true);
+    setFormError("");
 
     try {
-      const user = {
+      const result = await createPatientAccount({
         name: values.name,
         email: values.email,
         phone: values.phone,
-      };
+        password: values.password,
+      });
 
-      const newUser = await createUser(user);
-
-      if (newUser) {
-        router.push(`/patients/${newUser.$id}/register`);
-      }
+      // On success the action redirects, so reaching here means it was refused.
+      if (result?.error) setFormError(result.error);
     } catch (error) {
-      console.log(error);
+      console.error(error);
+      setFormError("Unable to create your account. Please try again.");
     }
 
     setIsLoading(false);
@@ -84,6 +85,24 @@ export const PatientForm = () => {
           label="Phone number"
           placeholder="(555) 123-4567"
         />
+
+        <CustomFormField
+          fieldType={FormFieldType.PASSWORD}
+          control={form.control}
+          name="password"
+          label="Password"
+          placeholder="At least 8 characters"
+        />
+
+        <CustomFormField
+          fieldType={FormFieldType.PASSWORD}
+          control={form.control}
+          name="confirmPassword"
+          label="Confirm password"
+          placeholder="Repeat your password"
+        />
+
+        {formError && <p className="shad-error text-14-regular">{formError}</p>}
 
         <SubmitButton isLoading={isLoading}>Get Started</SubmitButton>
       </form>

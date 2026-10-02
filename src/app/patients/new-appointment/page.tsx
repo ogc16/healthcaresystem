@@ -1,10 +1,16 @@
 import Image from "next/image";
+import { redirect } from "next/navigation";
 
 import { AppointmentForm } from "@/components/forms/AppointmentForm";
+import { PatientLogoutButton } from "@/components/PatientLogoutButton";
 import { getPatient } from "@/lib/actions/patient.actions";
+import { requirePatient } from "@/lib/auth/guards";
 
-const Appointment = async ({ params: { userId } }: SearchParamProps) => {
-  const patient = await getPatient(userId);
+const Appointment = async () => {
+  const { userId } = await requirePatient();
+  const patient = await getPatient();
+
+  if (!patient) redirect("/patients/register");
 
   return (
     <div className="flex h-screen max-h-screen">
@@ -18,11 +24,15 @@ const Appointment = async ({ params: { userId } }: SearchParamProps) => {
             className="mb-12 h-10 w-fit"
           />
 
-          <AppointmentForm
-            patientId={patient?.$id}
-            userId={userId}
-            type="create"
-          />
+          <div className="flex items-center justify-between gap-4">
+            <AppointmentForm
+              patientId={patient?.$id}
+              userId={userId}
+              type="create"
+            />
+
+            <PatientLogoutButton />
+          </div>
 
           <p className="copyright mt-10 py-12">© 2024 CarePluse</p>
         </div>

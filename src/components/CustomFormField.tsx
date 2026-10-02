@@ -19,6 +19,7 @@ import { Textarea } from "./ui/textarea";
 
 export enum FormFieldType {
   INPUT = "input",
+  PASSWORD = "password",
   TEXTAREA = "textarea",
   PHONE_INPUT = "phoneInput",
   CHECKBOX = "checkbox",
@@ -58,6 +59,28 @@ const RenderInput = ({ field, props }: { field: any; props: CustomProps }) => {
           )}
           <FormControl>
             <Input
+              placeholder={props.placeholder}
+              {...field}
+              className="shad-input border-0"
+            />
+          </FormControl>
+        </div>
+      );
+    case FormFieldType.PASSWORD:
+      return (
+        <div className="flex rounded-md border border-dark-500 bg-dark-400">
+          {props.iconSrc && (
+            <Image
+              src={props.iconSrc}
+              height={24}
+              width={24}
+              alt={props.iconAlt || "icon"}
+              className="ml-2"
+            />
+          )}
+          <FormControl>
+            <Input
+              type="password"
               placeholder={props.placeholder}
               {...field}
               className="shad-input border-0"

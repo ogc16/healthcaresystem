@@ -12,13 +12,20 @@ declare interface CreateUserParams {
   name: string;
   email: string;
   phone: string;
+  password: string;
 }
 declare interface User extends CreateUserParams {
   $id: string;
 }
 
-declare interface RegisterUserParams extends CreateUserParams {
-  userId: string;
+/**
+ * `userId` is deliberately absent: the server injects it from the session, so a
+ * payload cannot nominate which account a record belongs to.
+ */
+declare interface RegisterUserParams {
+  name: string;
+  email: string;
+  phone: string;
   birthDate: Date;
   gender: Gender;
   address: string;
@@ -50,7 +57,6 @@ declare type CreateAppointmentParams = {
 
 declare type UpdateAppointmentParams = {
   appointmentId: string;
-  userId: string;
   timeZone: string;
   appointment: Appointment;
   type: string;

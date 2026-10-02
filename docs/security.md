@@ -14,7 +14,7 @@ Passkey submitted
   → redirect /admin
 ```
 
-Cookie `hcs_admin_session` holds `admin.<expiresAt>.<hmac>` and is set with:
+Cookie `hcs_admin_session` holds `admin.<payload>.<hmac>` and is set with:
 
 | Attribute | Value |
 | --- | --- |
@@ -25,12 +25,12 @@ Cookie `hcs_admin_session` holds `admin.<expiresAt>.<hmac>` and is set with:
 | `maxAge` | 8 hours |
 
 The HMAC is keyed by `SESSION_SECRET`. Rotating that secret invalidates every
-active session.
+active session, admin and patient alike.
 
 ### Why the token is signed
 
 An unsigned cookie would let a visitor edit `expiresAt` and mint an immortal
-session. The signature covers the role *and* the expiry, and verification
+session. The signature covers the role *and* the payload, and verification
 rejects any token whose signature doesn't match. Session logic lives in
 `src/lib/auth/session.ts` and is deliberately free of `node:crypto` and
 `next/headers` so it runs in both the Edge middleware and the Node runtime.
@@ -49,6 +49,120 @@ The previous implementation had no server-side gate at all:
 
 > **Deployment note:** remove `NEXT_PUBLIC_ADMIN_PASSKEY` from your hosting
 > environment. Set `ADMIN_PASSKEY` and `SESSION_SECRET` instead.
+
+## Patient authentication
+
+### Model
+
+Patients sign in with an email and password. Appwrite verifies the credential;
+this app never stores or compares it.
+
+```
+Signup (/)
+  → createPatientAccount  (src/lib/actions/auth.actions.ts)
+      → PatientAccountSchema validation, server-side
+      → users.create(email, phone, password, name)
+      → 409 on an existing email → "sign in instead", never a fallback sign-in
+      → account.createEmailPasswordSession(email, password)
+
+Sign in (/login)
+  → loginPatient
+      → LoginSchema validation, server-side
+      → account.createEmailPasswordSession(email, password)
+      → signed cookie hcs_patient_session = patient.<payload>.<hmac>
+
+Any /patients/* request
+  → middleware verifies the signature, redirects to /login?from=<path>
+  → page guard + action guard re-check server-side
+```
+
+The cookie carries `{ exp, uid, sid }`. `uid` is the Appwrite user id and is the
+only source of identity in the patient portal — no route accepts a user id, so
+there is nothing for a caller to tamper with. `sid` is the upstream Appwrite
+session id, so `logoutPatient` revokes the session in Appwrite
+(`users.deleteSession`) instead of only discarding the local cookie.
+
+Cookie attributes are identical to the admin cookie: `httpOnly`, `secure` in
+production, `sameSite: "lax"`, `path: "/"`, `maxAge` 8 hours.
+
+### Credentials are verified in Appwrite, not here
+
+The `account` client in `src/lib/appwrite.config.ts` is built **without the API
+key**. `account.createEmailPasswordSession` is the public sign-in endpoint, so
+keeping the admin key off it means Appwrite — not this app — decides whether the
+supplied credentials are correct.
+
+The trap this avoids: `users.createSession(userId)` mints a valid session for any
+user straight from the API key, with no password check whatsoever. It is a
+server-side impersonation helper and is not a sign-in path. It is not used
+anywhere in this codebase.
+
+### Route and action enforcement
+
+The `[userId]` route segment is gone. `/patients/*` routes take no identity
+parameter:
+
+| Route | Identity source |
+| --- | --- |
+| `/patients/register` | Session `uid` |
+| `/patients/new-appointment` | Session `uid` |
+| `/patients/new-appointment/success` | Session `uid` + appointment ownership |
+
+Ownership is enforced in the action layer by `assertCanActForPatient`, which
+admits an admin acting for anyone and a patient only for themselves:
+
+| Action | Rule |
+| --- | --- |
+| `getPatient()` | Reads the session user's own record. No `userId` parameter. |
+| `getUser()` | Reads the session user's own Appwrite account. No `userId` parameter. |
+| `sendSMSNotification(...)` | Was exported, so anyone could post an arbitrary `userId` and `content` and have the app send SMS — a messaging-abuse and cost vector that bypassed the ownership checks entirely. Now module-private; only `updateAppointment` may send, and only to the stored owner. |
+| `createUser(...)` | Was exported, so account creation was reachable directly, skipping server-side schema validation and returning the full user record. Now module-private to `createPatientAccount`. |
+| `registerPatient(...)` | `userId` is spread in from the payload and then overwritten with the session's, so a caller-supplied id cannot win. |
+| `createAppointment(...)` | Patient identity is the session; admins may book for anyone. |
+| `getAppointment(id)` | Requires `appointment.userId === session.userId`, or an admin session. |
+| `updateAppointment(...)` | Same ownership check, against the **stored** record rather than the payload. |
+
+Because these are `"use server"` exports, each is a network endpoint, and payload
+validation is not a trust boundary. Account creation and sign-in parse their
+input with Zod on the server, and `getUser`/`getPatient` derive identity from the
+session instead of accepting one.
+
+That same reasoning applies to what is *not* exported: two helpers were reachable
+as endpoints even though nothing outside their own flow should call them, and
+both have been made module-private. Audit new `"use server"` exports for the same
+property — a helper that only exists to serve one caller should not be a public
+endpoint.
+
+SMS recipients come from the stored appointment owner, not from the request, so a
+caller cannot redirect a reminder to an arbitrary phone number.
+
+### Post-sign-in redirects
+
+Both the login page and the `loginPatient` action pass the target through
+`safeReturnPath` (`src/lib/auth/return-path.ts`). `redirect()` accepts absolute
+URLs, so an unvalidated `from` would be an open redirect. Only local
+`/patients/` paths are honoured: single leading slash, no `..` segment, no
+backslash, no newline. `/patients/../admin` normalises to `/admin` before the
+browser requests it, so the prefix check on its own is not sufficient.
+
+### Existing accounts have no password
+
+Accounts created before this change were passwordless — the old `/` form only
+collected a name, email and phone. They cannot sign in, because
+`createEmailPasswordSession` has no password to check, and re-registering the
+same email returns the duplicate-email message rather than overwriting them.
+
+Before rollout, pick one:
+
+1. **Reset** — delete the unclaimed Appwrite users and let them sign up again.
+   Simplest, and appropriate for accounts that never completed registration.
+2. **Reset passwords** — set a password per user through the Appwrite console.
+3. **Add a reset flow** — a `createRecovery`/`updateRecovery` flow so users set
+   their own password. The most work, and the right answer if those accounts
+   are real people.
+
+Until one of these is done, those patients are locked out rather than
+compromised — but they are locked out.
 
 ## Upload validation
 
@@ -112,51 +226,51 @@ duplicate at write time instead.
 reaches `formatDateTime`, which throws a `RangeError` on an unknown identifier.
 That stops garbage input; it does **not** prove the caller is in that zone. The
 value still originates in the browser. It is used only to format the SMS
-reminder, so it is cosmetic — it must not gate anything security-relevant until
-patient authentication exists (gap 2).
+reminder, so it is cosmetic — it must not gate anything security-relevant.
+
+## What the auth change fixed
+
+The patient portal previously had no authentication at all. `[userId]` was a URL
+param with no proof of identity, so any visitor could walk
+`/patients/<any-id>/new-appointment` and read or change that patient's data.
+These actions were reachable by anyone:
+
+| Action | Before | Now |
+| --- | --- | --- |
+| `getAppointment(id)` | Read any appointment by guessing or leaking an ID. | Requires the stored owner to be the session subject, or an admin session. |
+| `updateAppointment(...)` | Rescheduled or cancelled *any* appointment, with an SMS side effect. | Ownership checked against the stored record; SMS goes to the stored owner. |
+| `registerPatient(...)` | Accepted a caller-supplied `userId`. | `userId` comes from the session and cannot be overridden. |
+| `getPatient(userId)` | Read any patient's record by id. | No parameter; always the session user's own record. |
+| `getUser(userId)` | Read any user's name, email and phone by id. | No parameter; always the session user's own account. |
+| `createAppointment(...)` | Open, unvalidated. | Session-derived identity plus server-side slot-conflict checks. |
 
 ## Open gaps
 
-None of these are fixed yet. All require patient-level authentication first.
+### 1. No audit log
 
-### 1. Server actions are unauthenticated (high)
-
-`src/lib/actions/appointment.actions.ts` exposes these as `"use server"`, so
-they are publicly callable endpoints:
-
-| Action | Problem |
-| --- | --- |
-| `getAppointment(id)` | No ownership check — any caller can read any appointment by guessing or leaking an ID. |
-| `updateAppointment(...)` | No ownership check — a caller can reschedule or cancel *any* appointment, and triggers an SMS as a side effect. |
-| `createAppointment(...)` | Open by design (patient booking), but unvalidated. Slot conflicts are now checked — see [Booking integrity](#booking-integrity). |
-
-Enforcement requires a patient session and a `document.userId === session.userId`
-comparison.
-
-### 2. No patient authentication at all
-
-`[userId]` is a URL param with no proof of identity. Any visitor can walk
-`/patients/<any-id>/new-appointment` and read or change that patient's data.
-This is the root cause of gap 1.
-
-Planned approach: Appwrite sessions (`users.createSession`), roles as an
-Appwrite label, ownership enforced in the action layer.
-
-### 3. No audit log
-
-Nothing records who viewed or modified a record. Required before this handles
+Nothing records who viewed or modified a record. Patient identity now exists, so
+there is something to log, but nothing records it. Required before this handles
 real PHI.
 
-### 4. Passkey is a single shared secret
+### 2. Passkey is a single shared secret
 
 One value for all admins, no per-admin identity, no rate limiting or lockout on
 `/admin/login`. Six digits is ~10^6 combinations and is brute-forceable unless
-rate-limited at the edge.
+rate-limited at the edge. Patient sign-in is likewise unthrottled — Appwrite
+applies its own limits, but there is no application-level control.
 
-### 5. No rate limiting on booking or registration
+### 3. No rate limiting on booking or registration
 
-`createAppointment` and `registerPatient` are unauthenticated and unbounded, so
-they can be used to exhaust the messaging quota or fill the storage bucket.
+Authenticated, but unbounded. `createAppointment` and `registerPatient` can be
+used to exhaust the messaging quota or fill the storage bucket.
+
+### 4. Session revocation is not immediate
+
+`logoutPatient` revokes the Appwrite session upstream, which is why `sid` is
+carried in the cookie. A stolen cookie is still accepted until its 8-hour
+expiry, because the middleware and guards check the signature and expiry but do
+not call Appwrite to confirm the session is still live. Shortening the TTL or
+adding a per-request upstream check are the available options.
 
 ## Reporting
 

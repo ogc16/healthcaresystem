@@ -3,20 +3,31 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   ADMIN_SESSION_COOKIE,
   isValidAdminSessionToken,
+  isValidPatientSessionToken,
+  PATIENT_SESSION_COOKIE,
 } from "@/lib/auth/session";
 
 export const middleware = async (request: NextRequest) => {
-  const token = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
+  const { pathname } = request.nextUrl;
+  const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
 
-  if (await isValidAdminSessionToken(token)) return NextResponse.next();
+  const valid = isAdminRoute
+    ? await isValidAdminSessionToken(
+        request.cookies.get(ADMIN_SESSION_COOKIE)?.value
+      )
+    : await isValidPatientSessionToken(
+        request.cookies.get(PATIENT_SESSION_COOKIE)?.value
+      );
 
-  const loginUrl = new URL("/admin/login", request.url);
+  if (valid) return NextResponse.next();
 
-  loginUrl.searchParams.set("from", request.nextUrl.pathname);
+  const loginUrl = new URL(isAdminRoute ? "/admin/login" : "/login", request.url);
+
+  loginUrl.searchParams.set("from", pathname);
 
   return NextResponse.redirect(loginUrl);
 };
 
 export const config = {
-  matcher: ["/admin", "/admin/((?!login).*)"],
+  matcher: ["/admin", "/admin/((?!login).*)", "/patients/:path*"],
 };

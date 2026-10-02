@@ -1,6 +1,41 @@
 import { z } from "zod";
 
-export const UserFormValidation = z.object({
+export const UserFormValidation = z
+  .object({
+    name: z
+      .string()
+      .min(2, "Name must be at least 2 characters")
+      .max(50, "Name must be at most 50 characters"),
+    email: z.string().email("Invalid email address"),
+    phone: z
+      .string()
+      .refine((phone) => /^\+\d{10,15}$/.test(phone), "Invalid phone number"),
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .max(128, "Password must be at most 128 characters"),
+    confirmPassword: z.string().min(1, "Confirm your password"),
+  })
+  .refine((values) => values.password === values.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
+export const LoginSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(1, "Password is required"),
+});
+
+/**
+ * Server-side boundary for account creation.
+ *
+ * Separate from `UserFormValidation` because `confirmPassword` is a client-side
+ * concern only: the two fields are compared before submit, and sending the
+ * confirmation to the server would add a copy of the secret that has no use
+ * there. The same length and format limits still apply, so the server does not
+ * accept weaker input than the browser did.
+ */
+export const PatientAccountSchema = z.object({
   name: z
     .string()
     .min(2, "Name must be at least 2 characters")
@@ -9,6 +44,10 @@ export const UserFormValidation = z.object({
   phone: z
     .string()
     .refine((phone) => /^\+\d{10,15}$/.test(phone), "Invalid phone number"),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .max(128, "Password must be at most 128 characters"),
 });
 
 export const PatientFormValidation = z.object({

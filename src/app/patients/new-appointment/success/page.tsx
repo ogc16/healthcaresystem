@@ -1,17 +1,24 @@
 import Image from "next/image";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
+import { PatientLogoutButton } from "@/components/PatientLogoutButton";
 import { Button } from "@/components/ui/button";
 import { Doctors } from "@/constants";
 import { getAppointment } from "@/lib/actions/appointment.actions";
+import { requirePatient } from "@/lib/auth/guards";
 import { formatDateTime } from "@/lib/utils";
 
-const RequestSuccess = async ({
-  searchParams,
-  params: { userId },
-}: SearchParamProps) => {
+const RequestSuccess = async ({ searchParams }: SearchParamProps) => {
+  await requirePatient();
+
   const appointmentId = (searchParams?.appointmentId as string) || "";
+
+  if (!appointmentId) redirect("/patients/new-appointment");
+
   const appointment = await getAppointment(appointmentId);
+
+  if (!appointment) redirect("/patients/new-appointment");
 
   const doctor = Doctors.find(
     (doctor) => doctor.name === appointment.primaryPhysician
@@ -67,11 +74,13 @@ const RequestSuccess = async ({
           </div>
         </section>
 
-        <Button variant="outline" className="shad-primary-btn" asChild>
-          <Link href={`/patients/${userId}/new-appointment`}>
-            New Appointment
-          </Link>
-        </Button>
+        <div className="flex flex-col items-center gap-4">
+          <Button variant="outline" className="shad-primary-btn" asChild>
+            <Link href="/patients/new-appointment">New Appointment</Link>
+          </Button>
+
+          <PatientLogoutButton />
+        </div>
 
         <p className="copyright">© 2024 CarePluse</p>
       </div>

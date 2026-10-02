@@ -26,16 +26,20 @@ Read in `src/lib/appwrite.config.ts`.
 `NEXT_PUBLIC_` variables are inlined into the client bundle at build time.
 Only put genuinely public identifiers behind this prefix — never a secret.
 
-## Admin authentication
+## Authentication secrets
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `ADMIN_PASSKEY` | yes | Shared admin passkey, verified server-side in `authenticateAdmin` |
-| `SESSION_SECRET` | yes | HMAC key for the session cookie. Use 32+ random characters. |
+| `SESSION_SECRET` | yes | HMAC key for **both** session cookies. Use 32+ random characters. |
 
 `ADMIN_PASSKEY` **must not** use the `NEXT_PUBLIC_` prefix. A previous version
 of this app named it `NEXT_PUBLIC_ADMIN_PASSKEY`, which published it to every
 visitor. Remove that variable from your deployment when you upgrade.
+
+Patient passwords need no environment variable — they are held by Appwrite and
+never reach this app. `SESSION_SECRET` signs the patient cookie too, so rotating
+it signs everyone out of both surfaces at once.
 
 Generate a secret:
 
@@ -83,6 +87,22 @@ and Appwrite rejects range queries against an unindexed attribute:
 
 Without these, booking fails at runtime with an index error rather than at build
 time.
+
+## Appwrite authentication setup
+
+Patient sign-in depends on Appwrite accepting email/password credentials. Confirm
+in the Appwrite console:
+
+| Setting | Required | Notes |
+| --- | --- | --- |
+| Email/password auth enabled | yes | `/login` calls `account.createEmailPasswordSession`. If email/password is disabled for the project, every sign-in fails with an auth error. |
+| User registration | your call | If enabled, anyone can create an Appwrite account directly via the API, bypassing this app's form. Turn it off if self-registration here is the only path you want. |
+| Session length | optional | Appwrite's own session lifetime. This app's cookie is 8 hours; Appwrite's default (1 year) is longer, so the cookie is the binding constraint. |
+
+> **Before rollout:** accounts created before patient auth existed have no
+> password and cannot sign in. See "Existing accounts have no password" in
+> [security.md](security.md#existing-accounts-have-no-password) for the three
+> ways to handle them.
 
 ## Sentry
 

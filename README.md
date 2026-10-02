@@ -54,7 +54,7 @@ A healthcare patient management application that allows patients to easily regis
 
 ## <a name="features">🔋 Features</a>
 
-👉 **Register as a Patient**: Users can sign up and create a personal profile as a patient.
+👉 **Register as a Patient**: Users sign up with an email and password, verified by Appwrite. Their patient record is keyed to the signed-in session, not to a URL parameter.
 
 👉 **Book a New Appointment with Doctor**: Patients can schedule appointments with doctors at their convenience and can book multiple appointments.
 
@@ -293,6 +293,40 @@ sequenceDiagram
     end
 ```
 
+### Sequence diagram — patient authentication
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Patient
+    participant MW as Middleware
+    participant Login as /login
+    participant Action as loginPatient
+    participant Appwrite as Appwrite Account
+    participant Jar as Session Cookie
+
+    Patient->>Login: GET /patients/new-appointment
+    Login->>MW: request passes through
+    MW->>Jar: read hcs_patient_session
+    alt cookie missing, tampered, or expired
+        MW-->>Patient: 307 redirect to /login?from=/patients/new-appointment
+    else signature valid and unexpired
+        MW-->>Patient: allow request
+    end
+
+    Patient->>Action: submit email + password
+    Action->>Action: Zod validation (server-side)
+    Action->>Appwrite: account.createEmailPasswordSession (keyless client)
+    alt invalid credentials
+        Appwrite-->>Action: 401
+        Action-->>Patient: "Invalid email or password."
+    else session created
+        Appwrite-->>Action: session (userId, $id)
+        Action->>Jar: set patient.uid.sid token (httpOnly, Secure, 8h)
+        Action-->>Patient: redirect to safe return path
+    end
+```
+
 ### Sequence diagram — booking an appointment
 
 ```mermaid
@@ -302,6 +336,7 @@ sequenceDiagram
     participant Form as AppointmentForm
     participant Zod as getAppointmentSchema
     participant Action as createAppointment
+    participant Guard as assertCanActForPatient
     participant DB as Appwrite Appointments
     participant SMS as Appwrite Messaging
 
@@ -309,6 +344,8 @@ sequenceDiagram
     Form->>Zod: validate fields
     Zod-->>Form: parsed or field errors
     Form->>Action: createAppointment(payload)
+    Action->>Guard: patient session required
+    Guard-->>Action: uid from signed cookie, not from payload
     Action->>DB: createDocument status pending
     DB-->>Action: appointment document
     Action-->>Form: new appointment id
@@ -342,8 +379,9 @@ sequenceDiagram
     Page-->>Admin: refreshed dashboard
 ```
 
-> ⚠️ The `timeZone` sent from the client is **not** yet trusted or verified —
-> it originates in the browser. See [docs/security.md](docs/security.md).
+> ⚠️ The `timeZone` sent from the client is **not** trusted — it originates in the
+> browser. It is validated as a real IANA zone and used only to format the SMS,
+> never to gate anything. See [docs/security.md](docs/security.md).
 
 ## <a name="quick-start">🤸 Quick Start</a>
 
@@ -871,13 +909,15 @@ declare interface CreateUserParams {
   name: string;
   email: string;
   phone: string;
+  password: string;
 }
 declare interface User extends CreateUserParams {
   $id: string;
 }
 
+// No userId: the server takes the subject from the signed session, so there is
+// nothing for a caller to tamper with.
 declare interface RegisterUserParams extends CreateUserParams {
-  userId: string;
   birthDate: Date;
   gender: Gender;
   address: string;
@@ -909,9 +949,9 @@ declare type CreateAppointmentParams = {
 
 declare type UpdateAppointmentParams = {
   appointmentId: string;
-  userId: string;
   appointment: Appointment;
   type: string;
+  timeZone: string;
 };
 ```
 
@@ -1044,15 +1084,30 @@ export const formatDateTime = (dateString: Date | string) => {
 ```typescript
 import { z } from "zod";
 
-export const UserFormValidation = z.object({
-  name: z
-    .string()
-    .min(2, "Name must be at least 2 characters")
-    .max(50, "Name must be at most 50 characters"),
+export const UserFormValidation = z
+  .object({
+    name: z
+      .string()
+      .min(2, "Name must be at least 2 characters")
+      .max(50, "Name must be at most 50 characters"),
+    email: z.string().email("Invalid email address"),
+    phone: z
+      .string()
+      .refine((phone) => /^\d{10,15}$/.test(phone), "Invalid phone number"),
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .max(128, "Password must be at most 128 characters"),
+    confirmPassword: z.string().min(1, "Confirm your password"),
+  })
+  .refine((values) => values.password === values.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
+export const LoginSchema = z.object({
   email: z.string().email("Invalid email address"),
-  phone: z
-    .string()
-    .refine((phone) => /^\+\d{10,15}$/.test(phone), "Invalid phone number"),
+  password: z.string().min(1, "Password is required"),
 });
 
 export const PatientFormValidation = z.object({

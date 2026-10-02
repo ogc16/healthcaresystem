@@ -91,12 +91,11 @@ export const AppointmentForm = ({
         if (newAppointment) {
           form.reset();
           router.push(
-            `/patients/${userId}/new-appointment/success?appointmentId=${newAppointment.$id}`
+            `/patients/new-appointment/success?appointmentId=${newAppointment.$id}`
           );
         }
       } else {
         const appointmentToUpdate = {
-          userId,
           appointmentId: appointment?.$id!,
           timeZone,
           appointment: {
