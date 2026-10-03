@@ -1,5 +1,3 @@
-/* eslint-disable no-unused-vars */
-
 declare type SearchParamProps = {
   params: Promise<{ [key: string]: string }>;
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;

@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars */
 import { E164Number } from "libphonenumber-js/core";
 import Image from "next/image";
 import ReactDatePicker from "react-datepicker";
@@ -114,7 +113,7 @@ const RenderInput = <TFieldValues extends FieldValues>({
             international
             withCountryCallingCode
             value={field.value as E164Number | undefined}
-            onChange={field.onChange}
+            onChange={(value) => field.onChange(value)}
             className="input-phone"
           />
         </FormControl>
@@ -126,7 +125,7 @@ const RenderInput = <TFieldValues extends FieldValues>({
             <Checkbox
               id={props.name}
               checked={field.value}
-              onCheckedChange={field.onChange}
+              onCheckedChange={(checked) => field.onChange(checked)}
             />
             <label htmlFor={props.name} className="checkbox-label">
               {props.label}
@@ -159,7 +158,10 @@ const RenderInput = <TFieldValues extends FieldValues>({
     case FormFieldType.SELECT:
       return (
         <FormControl>
-          <Select onValueChange={field.onChange} defaultValue={field.value}>
+          <Select
+            onValueChange={(value) => field.onChange(value)}
+            defaultValue={field.value}
+          >
             <FormControl>
               <SelectTrigger className="shad-select-trigger">
                 <SelectValue placeholder={props.placeholder} />

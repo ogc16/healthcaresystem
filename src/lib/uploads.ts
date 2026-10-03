@@ -13,13 +13,7 @@
  */
 export const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
 
-const ALLOWED_UPLOAD_MIME_TYPES = [
-  "application/pdf",
-  "image/jpeg",
-  "image/png",
-] as const;
-
-type AllowedMimeType = (typeof ALLOWED_UPLOAD_MIME_TYPES)[number];
+type AllowedMimeType = "application/pdf" | "image/jpeg" | "image/png";
 
 /**
  * Extensions are bound to the content type they must actually carry. Without

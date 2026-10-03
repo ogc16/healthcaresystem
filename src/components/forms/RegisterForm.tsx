@@ -164,7 +164,7 @@ const RegisterForm = ({ user }: { user: User }) => {
                 <FormControl>
                   <RadioGroup
                     className="flex h-11 gap-6 xl:justify-between"
-                    onValueChange={field.onChange}
+                    onValueChange={(value) => field.onChange(value)}
                     defaultValue={field.value}
                   >
                     {GenderOptions.map((option, i) => (
@@ -341,7 +341,10 @@ const RegisterForm = ({ user }: { user: User }) => {
             label="Scanned Copy of Identification Document"
             renderSkeleton={(field) => (
               <FormControl>
-                <FileUploader files={field.value} onChange={field.onChange} />
+                <FileUploader
+                  files={field.value}
+                  onChange={(files) => field.onChange(files)}
+                />
               </FormControl>
             )}
           />

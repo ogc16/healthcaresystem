@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useState, useTransition } from "react";
 
 import { authenticateAdmin } from "@/app/admin/actions";
@@ -67,7 +68,7 @@ export const AdminLoginForm = () => {
 
       <p className="text-14-regular flex items-center justify-center gap-2 text-dark-600">
         <Image src="/assets/icons/close.svg" alt="" width={14} height={14} />
-        <a href="/">Return to patient portal</a>
+        <Link href="/">Return to patient portal</Link>
       </p>
     </form>
   );
