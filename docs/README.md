@@ -25,6 +25,7 @@ Patient portal: <http://localhost:3000> — admin: <http://localhost:3000/admin/
 | `npm start` | Serve the production build |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | Vitest unit tests |
 
 ## Project layout
 

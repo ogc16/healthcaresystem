@@ -46,18 +46,31 @@ npm run start   # serve the production build
 ```bash
 npm run typecheck
 npm run lint
+npm test
 npm run build
 ```
 
-All three must pass. `typecheck` and `lint` catch most mechanical problems;
-`build` is the one that catches framework-level breakage, so do not skip it.
+All four must pass. `typecheck` and `lint` catch most mechanical problems;
+`test` guards the security invariants below; `build` is the one that catches
+framework-level breakage, so do not skip it.
 
-There is currently **no committed test runner**. Checks that would normally be
-unit tests — session token signing and expiry, redirect sanitisation, schedule
-conflict detection — have been run as throwaway harnesses rather than as a
-suite. If you touch those areas, please re-verify the behaviour yourself and say
-in the PR description how you checked it. Adding a real test runner is a welcome
-contribution.
+Tests use [Vitest](https://vitest.dev) and live beside the code they cover as
+`*.test.ts`. The current suite concentrates on the parts of this codebase that
+fail silently and dangerously if they regress:
+
+| File | Covers |
+| --- | --- |
+| `src/lib/auth/session.test.ts` | token signing, expiry, role separation, malformed payloads |
+| `src/lib/auth/return-path.test.ts` | post-login redirect sanitisation (open redirect) |
+| `src/lib/uploads.test.ts` | magic-byte upload validation, extension/content binding, size limit |
+| `src/lib/appointment-slots.test.ts` | double-booking detection at the slot boundary |
+
+Run `npm run test:watch` while working on one of them.
+
+If you change any of the behaviour listed under
+[Security-sensitive changes](#security-sensitive-changes), add or update a test in
+the same pull request. A change to auth, upload validation or scheduling that
+lands without a test is the one thing this repository should not accept.
 
 ## Security-sensitive changes
 
