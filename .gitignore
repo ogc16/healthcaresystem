@@ -26,7 +26,12 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env files
-.env*.local
+# Ignores `.env`, `.env.local`, `.env.production`, etc. so real Appwrite keys and
+# Sentry tokens cannot be staged by a stray `git add -A`. `.env.example` is
+# re-included so the required variables stay documented in the repository.
+.env
+.env.*
+!.env.example
 
 # vercel
 .vercel
