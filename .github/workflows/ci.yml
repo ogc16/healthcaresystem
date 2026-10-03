@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A rapid series of pushes to the same ref should not queue up four full builds.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# The workflow only ever needs to read the repository.
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Node 20 is past end-of-life. This is the oldest runtime that still
+          # satisfies everything the dependency tree asks for: Sentry needs
+          # >=20.19 and vite (via vitest) needs @types/node >=22.12.
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # No Appwrite variables are set. Client construction in
+      # src/lib/appwrite.config.ts is deferred to first use and fails loudly by
+      # name, so a build that never calls the API needs no real credentials.
+      # SENTRY_AUTH_TOKEN is deliberately absent too: with no token the
+      # source-map upload is skipped instead of failing the build.
+      - name: Disable Sentry telemetry
+        run: echo "SENTRY_TELEMETRY=false" >> "$GITHUB_ENV"
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
