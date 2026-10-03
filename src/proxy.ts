@@ -7,7 +7,7 @@ import {
   PATIENT_SESSION_COOKIE,
 } from "@/lib/auth/session";
 
-export const middleware = async (request: NextRequest) => {
+export const proxy = async (request: NextRequest) => {
   const { pathname } = request.nextUrl;
   const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
 

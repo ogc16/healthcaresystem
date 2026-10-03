@@ -2,7 +2,7 @@
 
 ## Stack
 
-Next.js 14 (App Router) · TypeScript · Tailwind + shadcn/ui · Appwrite
+Next.js 16 (App Router) · TypeScript · Tailwind + shadcn/ui · Appwrite
 (databases, storage, messaging) · Sentry.
 
 ## Request flow
@@ -10,7 +10,7 @@ Next.js 14 (App Router) · TypeScript · Tailwind + shadcn/ui · Appwrite
 ```
 Browser
   │
-  ├─ src/middleware.ts ──── edge runtime, runs before every /admin* request
+  ├─ src/proxy.ts ───────── Node.js runtime, runs before every /admin* request
   │      └─ validates HMAC-signed session cookie → redirect to /admin/login
   │
   ├─ Server Component (src/app/**/page.tsx)
@@ -20,18 +20,18 @@ Browser
          └─ src/lib/appwrite.config.ts → Appwrite REST API
 ```
 
-## Middleware vs. guards
+## Proxy vs. guards
 
 Two layers protect `/admin`, deliberately:
 
-1. **Middleware** (`src/middleware.ts`) rejects unauthenticated requests at the
-   edge for the routes in
+1. **Proxy** (`src/proxy.ts`) rejects unauthenticated requests in front of
+   the routes in
    `["/admin", "/admin/((?!login).*)", "/patients/:path*"]`, which covers
    `/admin` and every sub-route except `/admin/login`, plus the whole patient
    portal. Admin routes require an admin cookie; patient routes require a
    patient cookie, so neither session can be replayed against the other's area.
 2. **Page guard** (`src/app/admin/page.tsx`) re-checks the session and
-   redirects. Middleware alone would be a single point of failure.
+   redirects. Proxy alone would be a single point of failure.
 
 `getRecentAppointmentList` additionally throws if called without a valid
 session, so the data layer fails closed even if a route is added later and

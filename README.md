@@ -10,7 +10,7 @@
   </div>
 
   <div align="center">
-      Patient registration, appointment scheduling, and an admin dashboard built with Next.js 14 and Appwrite.
+      Patient registration, appointment scheduling, and an admin dashboard built with Next.js 16 and Appwrite.
     </div>
 
     <div align="center">
@@ -43,7 +43,7 @@ A healthcare patient management application that allows patients to easily regis
 
 | Layer | Technology |
 | --- | --- |
-| Framework | Next.js 14 (App Router), React 18 |
+| Framework | Next.js 16 (App Router), React 19 |
 | Language | TypeScript 5 (strict) |
 | Styling | Tailwind CSS, shadcn/ui (Radix UI) |
 | Backend | Appwrite — databases, storage, messaging |
@@ -85,7 +85,7 @@ src/
   lib/          Server logic: Appwrite client, actions, auth
   constants/    Shared constants
   types/        Global type declarations
-  middleware.ts Route protection
+  proxy.ts     Route protection
 public/         Static assets
 docs/           Documentation
 ```
@@ -189,7 +189,7 @@ flowchart TB
     end
 
     subgraph "Next.js Server"
-        MW[Middleware]
+        MW[Proxy]
         Pages[App Router Pages]
         Actions[Server Actions]
         Auth[Auth Session Module]
@@ -267,7 +267,7 @@ erDiagram
 sequenceDiagram
     autonumber
     actor Admin
-    participant MW as Middleware
+    participant MW as Proxy
     participant Page as /admin
     participant Action as authenticateAdmin
     participant Jar as Session Cookie
@@ -299,7 +299,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     actor Patient
-    participant MW as Middleware
+    participant MW as Proxy
     participant Login as /login
     participant Action as loginPatient
     participant Appwrite as Appwrite Account
@@ -360,7 +360,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     actor Admin
-    participant MW as Middleware
+    participant MW as Proxy
     participant Page as /admin
     participant Action as updateAppointment
     participant DB as Appwrite Appointments

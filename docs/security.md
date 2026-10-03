@@ -33,7 +33,7 @@ An unsigned cookie would let a visitor edit `expiresAt` and mint an immortal
 session. The signature covers the role *and* the payload, and verification
 rejects any token whose signature doesn't match. Session logic lives in
 `src/lib/auth/session.ts` and is deliberately free of `node:crypto` and
-`next/headers` so it runs in both the Edge middleware and the Node runtime.
+`next/headers` so it runs in the Node.js runtime that Proxy and Server Components share.
 
 ### What was fixed
 
@@ -72,7 +72,7 @@ Sign in (/login)
       → signed cookie hcs_patient_session = patient.<payload>.<hmac>
 
 Any /patients/* request
-  → middleware verifies the signature, redirects to /login?from=<path>
+  → proxy verifies the signature, redirects to /login?from=<path>
   → page guard + action guard re-check server-side
 ```
 
@@ -268,7 +268,7 @@ used to exhaust the messaging quota or fill the storage bucket.
 
 `logoutPatient` revokes the Appwrite session upstream, which is why `sid` is
 carried in the cookie. A stolen cookie is still accepted until its 8-hour
-expiry, because the middleware and guards check the signature and expiry but do
+expiry, because the proxy and guards check the signature and expiry but do
 not call Appwrite to confirm the session is still live. Shortening the TTL or
 adding a per-request upstream check are the available options.
 

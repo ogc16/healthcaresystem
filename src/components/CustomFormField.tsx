@@ -2,7 +2,7 @@
 import { E164Number } from "libphonenumber-js/core";
 import Image from "next/image";
 import ReactDatePicker from "react-datepicker";
-import { Control } from "react-hook-form";
+import { Control, FieldPath, FieldValues } from "react-hook-form";
 import PhoneInput from "react-phone-number-input";
 
 import { Checkbox } from "./ui/checkbox";
@@ -28,8 +28,8 @@ export enum FormFieldType {
   SKELETON = "skeleton",
 }
 
-interface CustomProps {
-  control: Control<any>;
+interface CustomProps<TFieldValues extends FieldValues = FieldValues> {
+  control: Control<TFieldValues>;
   name: string;
   label?: string;
   placeholder?: string;
@@ -43,7 +43,13 @@ interface CustomProps {
   fieldType: FormFieldType;
 }
 
-const RenderInput = ({ field, props }: { field: any; props: CustomProps }) => {
+const RenderInput = <TFieldValues extends FieldValues>({
+  field,
+  props,
+}: {
+  field: any;
+  props: CustomProps<TFieldValues>;
+}) => {
   switch (props.fieldType) {
     case FormFieldType.INPUT:
       return (
@@ -142,7 +148,7 @@ const RenderInput = ({ field, props }: { field: any; props: CustomProps }) => {
             <ReactDatePicker
               showTimeSelect={props.showTimeSelect ?? false}
               selected={field.value}
-              onChange={(date: Date) => field.onChange(date)}
+              onChange={(date: Date | null) => field.onChange(date)}
               timeInputLabel="Time:"
               dateFormat={props.dateFormat ?? "MM/dd/yyyy"}
               wrapperClassName="date-picker"
@@ -172,13 +178,15 @@ const RenderInput = ({ field, props }: { field: any; props: CustomProps }) => {
   }
 };
 
-const CustomFormField = (props: CustomProps) => {
+const CustomFormField = <TFieldValues extends FieldValues = FieldValues>(
+  props: CustomProps<TFieldValues>
+) => {
   const { control, name, label } = props;
 
   return (
     <FormField
       control={control}
-      name={name}
+      name={name as FieldPath<TFieldValues>}
       render={({ field }) => (
         <FormItem className="flex-1">
           {props.fieldType !== FormFieldType.CHECKBOX && label && (

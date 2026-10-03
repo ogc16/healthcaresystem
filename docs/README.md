@@ -3,7 +3,7 @@
 | Doc | Contents |
 | --- | --- |
 | [architecture.md](architecture.md) | Directory layout, request flow, data access |
-| [security.md](security.md) | Admin and patient auth model, middleware, known open gaps |
+| [security.md](security.md) | Admin and patient auth model, proxy, known open gaps |
 | [environment.md](environment.md) | Every environment variable and what it grants |
 
 ## Quick start
@@ -38,7 +38,7 @@ src/
   lib/          Server logic: Appwrite client, actions, auth
   constants/    Shared constants
   types/        Global type declarations
-  middleware.ts Route protection
+  proxy.ts     Route protection
 public/         Static assets served at the web root
 docs/           This documentation
 ```

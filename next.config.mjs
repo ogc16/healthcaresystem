@@ -6,6 +6,14 @@ import { withSentryConfig } from "@sentry/nextjs/config";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Turbopack walks up looking for a lockfile to infer the project root. This
+  // repo is nested under the user profile, which has its own package-lock.json,
+  // so Turbopack warned on every `next dev` / `next build` that it was ignoring
+  // C:\Users\user\package-lock.json. Pinning the root keeps resolution and file
+  // watching anchored to the repo regardless of where it is checked out.
+  turbopack: {
+    root: process.cwd(),
+  },
   experimental: {
     // Registration uploads an identification document through a server action,
     // so the request body carries the file. This defaults to 1mb, which

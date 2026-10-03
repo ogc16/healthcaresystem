@@ -9,11 +9,13 @@ import { safeReturnPath } from "@/lib/auth/return-path";
 const Login = async ({
   searchParams,
 }: {
-  searchParams?: { from?: string | string[] };
+  searchParams?: Promise<{ from?: string | string[] }>;
 }) => {
-  if (await isPatientSession()) redirect(safeReturnPath(searchParams?.from));
+  const { from } = (await searchParams) ?? {};
 
-  const returnTo = safeReturnPath(searchParams?.from);
+  if (await isPatientSession()) redirect(safeReturnPath(from));
+
+  const returnTo = safeReturnPath(from);
 
   return (
     <div className="flex h-screen max-h-screen">

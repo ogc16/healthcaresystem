@@ -12,7 +12,9 @@ import { formatDateTime } from "@/lib/utils";
 const RequestSuccess = async ({ searchParams }: SearchParamProps) => {
   await requirePatient();
 
-  const appointmentId = (searchParams?.appointmentId as string) || "";
+  const params = await searchParams;
+
+  const appointmentId = (params?.appointmentId as string) || "";
 
   if (!appointmentId) redirect("/patients/new-appointment");
 

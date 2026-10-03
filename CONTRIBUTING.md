@@ -68,7 +68,7 @@ areas. They are easy to break silently:
   HMAC-SHA256 over a `<role>.<payload>.<signature>` token. The `account` Appwrite
   client is intentionally **keyless** so Appwrite, not this app, decides whether
   a password is correct. Do not attach the admin API key to it.
-- **Route gating** (`src/middleware.ts`) — matcher and redirect behaviour for
+- **Route gating** (`src/proxy.ts`) — matcher and redirect behaviour for
   `/admin` and `/patients`.
 - **Server actions** — every file under `src/lib/actions/` using `"use server"`
   is a network endpoint. Validate input with the Zod schemas in
