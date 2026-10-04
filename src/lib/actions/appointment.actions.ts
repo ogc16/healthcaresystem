@@ -124,6 +124,19 @@ export const getRecentAppointmentList = async () => {
       "An error occurred while retrieving the recent appointments:",
       error
     );
+
+    // Falling through with no return value handed the caller undefined, and the
+    // admin dashboard reads appointments.scheduledCount straight off the
+    // result, so an unreachable or unconfigured Appwrite became a TypeError
+    // and a 500 instead of an empty dashboard. An empty result is also the
+    // honest answer: nothing was retrieved, so there is nothing to show.
+    return {
+      totalCount: 0,
+      scheduledCount: 0,
+      pendingCount: 0,
+      cancelledCount: 0,
+      documents: [],
+    };
   }
 };
 

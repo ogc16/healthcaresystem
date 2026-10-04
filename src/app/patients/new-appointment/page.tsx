@@ -34,7 +34,7 @@ const Appointment = async () => {
             <PatientLogoutButton />
           </div>
 
-          <p className="copyright mt-10 py-12">© 2024 CarePluse</p>
+          <p className="copyright mt-10 py-12">© 2026 CarePulse</p>
         </div>
       </section>
 

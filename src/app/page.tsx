@@ -20,7 +20,7 @@ const Home = () => {
 
           <div className="text-14-regular mt-20 flex justify-between">
             <p className="justify-items-end text-dark-600 xl:text-left">
-              © 2024 CarePluse
+              © 2026 CarePulse
             </p>
             <Link href="/admin/login" className="text-green-500">
               Admin

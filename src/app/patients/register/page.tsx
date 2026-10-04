@@ -34,7 +34,7 @@ const Register = async () => {
             <PatientLogoutButton />
           </div>
 
-          <p className="copyright py-12">© 2024 CarePluse</p>
+          <p className="copyright py-12">© 2026 CarePulse</p>
         </div>
       </section>
 

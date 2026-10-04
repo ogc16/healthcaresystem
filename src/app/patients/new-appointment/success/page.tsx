@@ -84,7 +84,7 @@ const RequestSuccess = async ({ searchParams }: SearchParamProps) => {
           <PatientLogoutButton />
         </div>
 
-        <p className="copyright">© 2024 CarePluse</p>
+        <p className="copyright">© 2026 CarePulse</p>
       </div>
     </div>
   );
