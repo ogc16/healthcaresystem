@@ -34,6 +34,40 @@ function requireEnv(name: string, value: string | undefined): string {
   return value;
 }
 
+/**
+ * Everything the admin dashboard needs before it can read anything.
+ *
+ * `NEXT_PUBLIC_BUCKET_ID` is deliberately excluded: it gates file uploads, so
+ * naming it here would send an admin to fill in a variable this page never
+ * touches.
+ */
+const REQUIRED_APPWRITE_ENV = [
+  "NEXT_PUBLIC_ENDPOINT",
+  "PROJECT_ID",
+  "API_KEY",
+  "DATABASE_ID",
+  "PATIENT_COLLECTION_ID",
+  "DOCTOR_COLLECTION_ID",
+  "APPOINTMENT_COLLECTION_ID",
+] as const;
+
+/**
+ * Names of the required variables that are unset, so a caller can tell the user
+ * which ones to fill in.
+ *
+ * An unset variable and an empty one are the same thing to Appwrite, so an
+ * empty string counts as missing. That is not a hypothetical: a `.env.local`
+ * written from `.env.example` without editing the placeholders produces exactly
+ * that, and it is the reason a dashboard can appear "live" while every query
+ * fails.
+ *
+ * Read from `process.env` at call time rather than off the destructured
+ * constants above, so a caller cannot be told configuration is present when the
+ * captured values say otherwise.
+ */
+export const missingAppwriteEnv = () =>
+  REQUIRED_APPWRITE_ENV.filter((name) => !process.env[name]);
+
 let client: sdk.Client | undefined;
 
 /** Admin client. Carries the API key, so every call is a privileged one. */

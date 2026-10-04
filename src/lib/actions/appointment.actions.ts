@@ -11,6 +11,7 @@ import {
   DATABASE_ID,
   getDatabases,
   getMessaging,
+  missingAppwriteEnv,
 } from "../appwrite.config";
 import {
   assertCanActForPatient,
@@ -55,10 +56,44 @@ export const createAppointment = async (
   }
 };
 
+export type AppointmentSummary = {
+  totalCount: number;
+  scheduledCount: number;
+  pendingCount: number;
+  cancelledCount: number;
+  documents: Appointment[];
+};
+
+/**
+ * Why the dashboard might have nothing to show, kept distinct from "there is
+ * nothing to show".
+ *
+ * The previous version returned an empty summary on any failure. That fixed the
+ * crash, but it made three different situations render identically as zeroes:
+ * a genuinely empty database, an unconfigured server, and Appwrite being
+ * unreachable. For a screen an admin uses to judge whether patients have
+ * booked, "0 appointments" is a claim, and a silently wrong one is worse than a
+ * visible error.
+ */
+export type RecentAppointments =
+  | { status: "ok"; data: AppointmentSummary }
+  | { status: "unconfigured"; missing: string[] }
+  | { status: "unreachable" };
+
 //  GET RECENT APPOINTMENTS
-export const getRecentAppointmentList = async () => {
+export const getRecentAppointmentList = async (): Promise<RecentAppointments> => {
   if (!(await isAdminSession())) {
     throw new Error("Unauthorized: admin session required");
+  }
+
+  // Checked before the query rather than inferred from a failure, so the user
+  // is told which variables to set instead of being handed a stack trace, and
+  // so this case logs nothing. An unconfigured deployment is a setup state, not
+  // an incident.
+  const missing = missingAppwriteEnv();
+
+  if (missing.length > 0) {
+    return { status: "unconfigured", missing };
   }
 
   try {
@@ -118,25 +153,18 @@ export const getRecentAppointmentList = async () => {
       documents: appointments.documents,
     };
 
-    return parseStringify(data);
+    return { status: "ok", data: parseStringify(data) };
   } catch (error) {
+    // Reached only when configuration is complete but the query itself failed,
+    // which is a real incident and worth a stack trace in the log.
     console.error(
       "An error occurred while retrieving the recent appointments:",
       error
     );
 
-    // Falling through with no return value handed the caller undefined, and the
-    // admin dashboard reads appointments.scheduledCount straight off the
-    // result, so an unreachable or unconfigured Appwrite became a TypeError
-    // and a 500 instead of an empty dashboard. An empty result is also the
-    // honest answer: nothing was retrieved, so there is nothing to show.
-    return {
-      totalCount: 0,
-      scheduledCount: 0,
-      pendingCount: 0,
-      cancelledCount: 0,
-      documents: [],
-    };
+    // Still not a zeroed summary. A count of 0 here would be an assertion that
+    // no appointments exist, which this failure gives no basis for.
+    return { status: "unreachable" };
   }
 };
 
