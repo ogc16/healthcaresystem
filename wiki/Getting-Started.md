@@ -111,12 +111,12 @@ variables to set — that is the intended behaviour, not a crash. See
    visitor's browser. Use `ADMIN_PASSKEY`.
 2. Set `SESSION_SECRET` in the deployment environment. It is **not** optional —
    without it, sign-in fails with `SESSION_SECRET is not set`.
-3. Fix the Sentry DSN. The DSN is currently **hardcoded** in
-   `sentry.client.config.ts` and there is no environment variable for it. As
-   committed, this app's errors and session replays are reported to the upstream
-   author's Sentry project. Either create your own project and replace the DSN in
-   that file, or move it behind an environment variable — wiring it up is an open
-   task in the [Roadmap](Roadmap.md). See
+3. Decide about Sentry, which is now **off unless you configure it**. Set
+   `SENTRY_DSN` for the server and `NEXT_PUBLIC_SENTRY_DSN` for the browser to
+   point at your own project; leave both empty and nothing is reported anywhere.
+   Earlier versions of this app committed a DSN belonging to the upstream
+   tutorial author, so every deployment reported its errors and session replays
+   to a third party by default. See
    [Troubleshooting](Troubleshooting.md#sentry-reports-to-the-wrong-project).
 4. Read [Security Model](Security-Model.md) end to end, and
    [Roadmap and Open Gaps](Roadmap.md) before handling any real patient data.

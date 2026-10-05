@@ -4,8 +4,18 @@
 
 import * as Sentry from "@sentry/nextjs";
 
+/**
+ * Server DSN. Must NOT use the `NEXT_PUBLIC_` prefix — a client-visible value
+ * would leak it into the browser bundle.
+ *
+ * Unset by default, which disables reporting. See sentry.client.config.ts for
+ * why the committed default was removed.
+ */
+const dsn = process.env.SENTRY_DSN;
+
 Sentry.init({
-  dsn: "https://3d627de24f5d06a1fc39000a06ca9a94@o4506813739368448.ingest.us.sentry.io/4507458386526208",
+  dsn,
+  enabled: Boolean(dsn),
 
   // Adjust this value in production, or use tracesSampler for greater control
   tracesSampleRate: 1,

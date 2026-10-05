@@ -5,8 +5,12 @@
 
 import * as Sentry from "@sentry/nextjs";
 
+/** Server DSN, same variable as sentry.server.config.ts. See the note there. */
+const dsn = process.env.SENTRY_DSN;
+
 Sentry.init({
-  dsn: "https://3d627de24f5d06a1fc39000a06ca9a94@o4506813739368448.ingest.us.sentry.io/4507458386526208",
+  dsn,
+  enabled: Boolean(dsn),
 
   // Adjust this value in production, or use tracesSampler for greater control
   tracesSampleRate: 1,

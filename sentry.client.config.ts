@@ -4,8 +4,26 @@
 
 import * as Sentry from "@sentry/nextjs";
 
+/**
+ * Unset by default, which disables reporting entirely.
+ *
+ * This used to be a committed DSN pointing at the upstream tutorial author's
+ * Sentry project, so every error and every sampled session replay from any
+ * deployment of this app was reported to a third party they do not control. On
+ * an application that handles patient data that is a disclosure nobody opted
+ * into, and rotating the DSN alone would not have helped: the old one is in git
+ * history from the first commit.
+ *
+ * `NEXT_PUBLIC_` is correct here and only here. A client-side DSN is public by
+ * design — it is a write-only ingest key, not a credential — and this prefix is
+ * what makes Next.js inline it into the browser bundle at build time. The server
+ * DSN in sentry.server.config.ts must NOT use this prefix.
+ */
+const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+
 Sentry.init({
-  dsn: "https://3d627de24f5d06a1fc39000a06ca9a94@o4506813739368448.ingest.us.sentry.io/4507458386526208",
+  dsn,
+  enabled: Boolean(dsn),
 
   // Adjust this value in production, or use tracesSampler for greater control
   tracesSampleRate: 1,

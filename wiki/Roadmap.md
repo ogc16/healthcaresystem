@@ -11,9 +11,11 @@ building as originally proposed.
 | `next-themes` removed | It injected `class` and `color-scheme` on `<html>` from `localStorage`, causing a hydration mismatch. Nothing consumed the class: no `.light`/`.dark` rules, no `dark:` variants, no `useTheme` calls |
 | Admin sign-in no longer throws | An uncaught error in a server action tears down the page to the global error boundary and leaked the missing variable name to the browser. Now returns a form error |
 | Rate limiting on admin sign-in | 5/address and 50 overall per 15 minutes, with tests |
+| Rate limiting on booking and registration | Shared throttle helper; booking, registration, and account creation all bounded. Registration is metered before the upload |
+| Sentry no longer reports to a third party | The committed upstream DSN is gone from all three configs. Reporting is off unless `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` are set |
 | Configuration reported explicitly | Missing variables are named on the dashboard instead of rendering zeroes |
 | CI workflow | typecheck, lint, test, build on every push |
-| 83 unit tests | Security invariants: sessions, redirects, uploads, booking conflicts, rate limits, config |
+| 96 unit tests | Security invariants: sessions, redirects, uploads, booking conflicts, rate limits, throttle ordering, config |
 
 ## Blocking deployment with real patient data
 
@@ -97,14 +99,20 @@ Needs a queue with retry and backoff.
 BullMQ needs a persistent Redis *and* a worker process that stays alive. It does
 not run on serverless. Do not build BullMQ for a Vercel deployment.
 
-### Booking and registration are unthrottled
+### Rate limiting is in-process, and patient sign-in has none
 
-`createAppointment` and `registerPatient` are authenticated but unbounded. They
-can exhaust the messaging quota or fill the storage bucket — a cost and
-availability problem, not a confidentiality one.
+Booking, registration, and account creation are throttled, via
+`src/lib/auth/throttle.ts`, which composes a per-subject allowance with a global
+ceiling. Two things are still open:
 
-The public booking endpoint should be limited per address and per session, in
-the same shape as the admin limiter, ideally backed by a shared store.
+- The counters are **in process memory**: per Node instance, reset on restart. On
+  more than one replica each keeps its own. This is the whole reason the limiter
+  is behind a small interface — swap in Redis or `@upstash/ratelimit` and no call
+  site changes.
+- **Patient sign-in is unthrottled** at the application layer. Account creation
+  is now limited, which closes the cheaper abuse path, but sign-in against a
+  known email still gets only Appwrite's own protections. This is the next one to
+  close, and it is the same shape as the rest.
 
 ### Multi-step registration loses progress on refresh
 
@@ -148,9 +156,10 @@ several are larger than they look.
 
 ## Housekeeping
 
-- **Hardcoded Sentry DSN.** `sentry.client.config.ts` has a committed DSN and no
-  environment variable behind it, so this app reports errors and session replays
-  to the upstream author's Sentry project. Replace it or parameterise it.
+- **The old Sentry DSN is in git history.** The configs now read
+  `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` and report nothing when unset, but the
+  upstream DSN remains in the history of this repository. Rotating that project
+  upstream is the only way to revoke it for anyone who cloned an earlier commit.
 - **`next lint` is deprecated.** The `lint` script runs `eslint` directly, which
   is correct for Next 16.
 - **9 high-severity dev-only advisories** via `braces@3.0.3`, reachable only
@@ -166,7 +175,7 @@ several are larger than they look.
 
 1. Audit log — unblocks compliance and makes the next item possible.
 2. Per-admin identity — replaces the shared passkey.
-3. Shared-store rate limiting on booking and registration.
+3. Shared-store rate limiting, replacing the in-process counters.
 4. SMS queue, matched to the deployment target.
 5. Field-level encryption, free-text first, with envelope encryption.
 6. E2E suite, once credentials exist.

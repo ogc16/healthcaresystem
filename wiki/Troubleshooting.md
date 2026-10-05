@@ -114,17 +114,23 @@ most work and the right answer if those accounts are real people.
 
 ## Sentry reports to the wrong project
 
-The DSN is **hardcoded** in `sentry.client.config.ts` and there is no environment
-variable for it. As committed, this app's errors and session replays are reported
-to the upstream author's Sentry project.
+Reporting is off unless a DSN is configured, so if you are seeing events in a
+project you do not own, something is setting a DSN. Check `SENTRY_DSN` and
+`NEXT_PUBLIC_SENTRY_DSN` in your deployment environment first.
 
-The org and project slugs used for *source-map* uploads are overridable
-(`SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN` in `next.config.mjs`), but
-that does not change where events are sent.
+If you still see this symptom, the DSN is likely still in your build:
 
-To fix: create your own Sentry project and replace the DSN in that file, or wire
-it behind an environment variable. The latter is an open task in the
-[Roadmap](Roadmap.md).
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| Events in the upstream author's project, running a commit from this repo | Stale `NEXT_PUBLIC_SENTRY_DSN` baked into an old build | Redeploy with it unset. The browser DSN is inlined at **build** time, so clearing it in the runtime environment changes nothing until you rebuild |
+| Server-side events go somewhere unexpected | `SENTRY_DSN` is set | Unset it, or point it at your project |
+| Events appear with no DSN configured at all | A previous release hardcoded one | Update to a commit after the DSN was parameterised, then rebuild |
+
+The DSN used to be committed in all three `sentry.*.config.ts` files. That is
+fixed in the current code, but **git history still contains it**. Anyone who
+cloned the repository earlier can send events to that project, and rotating the
+DSN upstream is the only way to stop that — deleting it from `HEAD` does not
+retract it.
 
 ## Lint passes locally but fails in CI
 

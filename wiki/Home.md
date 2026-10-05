@@ -59,7 +59,7 @@ dashboard. Built on Next.js 16 (App Router) and Appwrite.
 
 ## Status
 
-Green on every push: typecheck, lint, 83 unit tests, and a production build all
+Green on every push: typecheck, lint, 96 unit tests, and a production build all
 run in CI on `main`.
 
 **This is not a HIPAA-compliant system and must not handle real patient data
@@ -68,6 +68,7 @@ there is no audit log, no field-level encryption, and the admin passkey is a
 single shared secret. The [Security Model](Security-Model.md) page is explicit
 about which controls are real and which are aspirational.
 
-Upstream is a public tutorial project (`javascript-mastery`), which explains
-both some of the code's shape and the Sentry configuration pointing at someone
-else's project.
+Upstream is a public tutorial project (`javascript-mastery`), which explains both
+some of the code's shape and the Sentry configuration that pointed at someone
+else's project. The DSN is now environment-driven and reporting is off by
+default; see [Troubleshooting](Troubleshooting.md#sentry-reports-to-the-wrong-project).

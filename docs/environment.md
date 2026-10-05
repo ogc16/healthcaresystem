@@ -106,7 +106,23 @@ in the Appwrite console:
 
 ## Sentry
 
-Sentry is configured in `next.config.mjs`:
+**Error reporting is off unless you configure it.** Two variables control where
+events go, one per runtime:
+
+| Variable | Scope | Purpose |
+| --- | --- | --- |
+| `SENTRY_DSN` | Server, edge | Where server-side events are sent |
+| `NEXT_PUBLIC_SENTRY_DSN` | Browser | Where client-side events are sent. Inlined into the client bundle at **build** time |
+
+Set a DSN and the SDK initialises. Leave it empty and nothing is sent anywhere.
+`NEXT_PUBLIC_` belongs only on the browser DSN; giving the server DSN that prefix
+would leak it into the bundle.
+
+A DSN is a write-only ingest key, not a credential — it is designed to be public,
+and it grants nothing beyond submitting events. It still matters that it points
+at your own project.
+
+Separately, `next.config.mjs` uses these for source-map uploads only:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -117,6 +133,8 @@ Sentry is configured in `next.config.mjs`:
 Source maps only upload when `SENTRY_AUTH_TOKEN` is present, so builds succeed
 without it — errors simply lack stack traces.
 
-> This previously hardcoded `org: "javascript-mastery"`, a leftover from the
-> upstream tutorial this project was forked from. Override `SENTRY_ORG` with
-> your own slug.
+> Both the DSN and `SENTRY_ORG` previously pointed at projects belonging to the
+> upstream tutorial this project was forked from, so any deployment reported its
+> errors, session replays, and source maps to a third party by default. The DSN
+> is fixed in the current code; the old value is still in git history, so rotate
+> the upstream project if that matters to you.
