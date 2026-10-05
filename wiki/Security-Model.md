@@ -72,19 +72,36 @@ and stored it in `localStorage`. Anyone loading the page could read it.
 
 ### Rate limiting
 
-Guessing a shared secret is only slow if attempts are throttled. The limiter is
-in `src/lib/auth/rate-limit.ts`, counted twice:
+Guessing a shared secret is only slow if attempts are throttled. The primitive is
+`createRateLimiter` in `src/lib/auth/rate-limit.ts`; `src/lib/auth/throttle.ts`
+composes it into a per-subject allowance plus a global ceiling, which is what
+every throttled action uses:
 
-| Limiter | Limit | Window |
-| --- | --- | --- |
-| Per address | 5 | 15 minutes |
-| Overall | 50 | 15 minutes |
+| Action | Per subject | Ceiling | Window |
+| --- | --- | --- | --- |
+| Admin sign-in | 5 per address | 50 | 15 min |
+| Account creation | 5 per address | 50 | 1 hour |
+| Patient registration | 5 per patient | 100 | 1 hour |
+| Appointment booking | 10 per acting identity | 200 | 1 hour |
+
+For admin sign-in, the two tiers are:
 
 The overall ceiling is the one that actually holds. `x-forwarded-for` is
 client-controlled on any deployment not behind a proxy that rewrites it, so the
 per-address limit alone can be sidestepped by rotating the header. Per-address is
 consumed **first**, so a caller who is already locked out cannot burn the global
-budget and lock everyone else out.
+budget and lock everyone else out. That ordering is asserted in
+`throttle.test.ts`, because reversing it is a cross-user denial of service.
+
+Session-backed actions key on the signed user id instead of the address. A
+hospital network or a mobile carrier behind CGNAT shares one address among many
+unrelated patients, so an address key there would throttle strangers together.
+
+- **Registration is throttled before the upload.** The upload is the expensive
+  part, storage is billed per GB, and a file that passes validation still costs
+  real bytes. Checking afterwards would leave the cost unmetered.
+- **Booking is keyed on the acting identity.** An admin booking on a patient's
+  behalf is charged to the admin, not to the patient who did nothing.
 
 Design details that are deliberate, and easy to undo by accident:
 
@@ -103,7 +120,8 @@ store, so with more than one replica each keeps its own counters, and a restart
 resets them. `RateLimiter` is an interface, so swapping in Redis or
 `@upstash/ratelimit` is a local change.
 
-The public booking and registration endpoints are **not** throttled. See the
+Booking, registration, and account creation are throttled. **Patient sign-in is
+not**, at the application layer; Appwrite applies its own limits. See the
 Roadmap.
 
 ## Patient authentication
@@ -214,8 +232,9 @@ Detailed in [Roadmap and Open Gaps](Roadmap.md). In brief:
 4. **Session revocation is not immediate.** A stolen cookie is accepted until its
    8-hour expiry. The proxy and guards check the signature and expiry but do not
    ask Appwrite whether the session is still live.
-5. **Booking and registration are unthrottled.** Authenticated, but unbounded —
-   they can exhaust the messaging quota or fill the storage bucket.
+5. **Patient sign-in is unthrottled at the application layer.** Booking,
+   registration, and account creation are now throttled; this one is not.
+   Appwrite applies its own limits, but there is no application-level control.
 6. **`timeZone` is client-asserted.** Validated as a real IANA zone, but it still
    originates in the browser. It only formats the SMS reminder, so it is
    cosmetic and must never gate anything security-relevant.

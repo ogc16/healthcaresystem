@@ -12,8 +12,17 @@ import {
   PATIENT_SESSION_COOKIE,
   patientSessionMaxAge,
 } from "../auth/session";
+import { clientAddress, createThrottle } from "../auth/throttle";
 import { parseStringify } from "../utils";
 import { LoginSchema, PatientAccountSchema } from "../validation";
+
+const HOUR_MS = 60 * 60 * 1000;
+
+const accountCreation = createThrottle({
+  limit: 5,
+  overallLimit: 50,
+  windowMs: HOUR_MS,
+});
 
 /**
  * Creates the Appwrite account for a new signup.
@@ -82,6 +91,16 @@ export const createPatientAccount = async (input: unknown) => {
       error: parsed.error.issues[0]?.message ?? "Please check your details.",
     };
   }
+
+  // The only unauthenticated write in the app, and therefore the cheapest to
+  // abuse: unlimited calls create unlimited Appwrite accounts. Throttled per
+  // address because there is no session to key on yet.
+  //
+  // Checked after parsing so malformed payloads, which cost nothing, do not
+  // consume an attempt that a real person spent on a typo.
+  const refused = await accountCreation.check(await clientAddress());
+
+  if (refused) return { error: refused };
 
   const values = parsed.data;
 

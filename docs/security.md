@@ -263,17 +263,36 @@ overall ceiling is the load-bearing one, because `x-forwarded-for` is
 client-controlled on any deployment not behind a proxy that rewrites it, so a
 per-address limit alone can be sidestepped by rotating the header.
 
-Two limits on that protection:
+Patient sign-in is still unthrottled; Appwrite applies its own limits, but there
+is no application-level control. See gap 3.
+
+### 3. Rate limiting is in-process, and patient sign-in has none
+
+Booking, registration, and account creation are now throttled through
+`src/lib/auth/throttle.ts`, which composes a per-subject allowance with a global
+ceiling:
+
+| Action | Per subject | Ceiling | Window |
+| --- | --- | --- | --- |
+| Admin sign-in | 5 per address | 50 | 15 min |
+| Account creation | 5 per address | 50 | 1 hour |
+| Patient registration | 5 per patient | 100 | 1 hour |
+| Appointment booking | 10 per acting identity | 200 | 1 hour |
+
+Session-backed actions are keyed on the signed user id rather than the address,
+so a shared or NAT'd address does not throttle unrelated patients. Account
+creation has no session yet, so it is keyed on the address.
+
+Registration is throttled **before** the upload, since the upload is the
+expensive part and storage is billed per GB. Booking is keyed on the acting
+identity, so an admin booking on a patient's behalf is charged to the admin.
+
+Remaining limitations:
 
 - The counters are **in process memory**, so they are per Node instance and reset
   on restart. With more than one replica, each keeps its own.
-- Patient sign-in is still unthrottled. Appwrite applies its own limits, but
-  there is no application-level control.
-
-### 3. No rate limiting on booking or registration
-
-Authenticated, but unbounded. `createAppointment` and `registerPatient` can be
-used to exhaust the messaging quota or fill the storage bucket.
+- **Patient sign-in is still unthrottled.** Appwrite applies its own limits, but
+  there is no application-level control. This is the next one to close.
 
 ### 4. Session revocation is not immediate
 

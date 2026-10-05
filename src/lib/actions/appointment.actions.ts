@@ -18,8 +18,18 @@ import {
   getSession,
   isAdminSession,
 } from "../auth/guards";
+import { createThrottle } from "../auth/throttle";
 import { formatDateTime, parseStringify } from "../utils";
 import { isValidTimeZone } from "../validation";
+
+const HOUR_MS = 60 * 60 * 1000;
+
+/** Generous enough for booking several doctors in one sitting, tight enough to stop filling the collection. */
+const bookingAttempts = createThrottle({
+  limit: 10,
+  overallLimit: 200,
+  windowMs: HOUR_MS,
+});
 
 //  CREATE APPOINTMENT
 export const createAppointment = async (
@@ -35,6 +45,18 @@ export const createAppointment = async (
     session.role === "admin" ? appointment.userId : session.userId;
 
   if (!ownerUserId) throw new Error("Unauthorized: no patient identity");
+
+  // Authenticated but otherwise unbounded: without this, a single session can
+  // fill the appointments collection and, via rescheduling, drive SMS spend.
+  //
+  // Keyed on the acting identity, not the appointment owner, so an admin
+  // booking on someone's behalf is charged to the admin rather than to the
+  // patient, who did nothing.
+  const refused = await bookingAttempts.check(
+    session.role === "admin" ? "admin" : `patient:${session.userId}`
+  );
+
+  if (refused) throw new Error(refused);
 
   await assertNoScheduleConflict({
     primaryPhysician: appointment.primaryPhysician,

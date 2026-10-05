@@ -14,8 +14,18 @@ import {
   getUsers,
 } from "../appwrite.config";
 import { requirePatient } from "../auth/guards";
+import { createThrottle } from "../auth/throttle";
 import { UploadValidationError, validateUpload } from "../uploads";
 import { parseStringify } from "../utils";
+
+const HOUR_MS = 60 * 60 * 1000;
+
+/** Realistically one, with a little room for a rejected document being retried. */
+const registrationAttempts = createThrottle({
+  limit: 5,
+  overallLimit: 100,
+  windowMs: HOUR_MS,
+});
 
 // GET USER
 /**
@@ -49,6 +59,17 @@ export const registerPatient = async ({
   // Identity comes from the session, never from the payload. Spreading `patient`
   // first and appending `userId` means a caller-supplied userId cannot win.
   const { userId } = await requirePatient();
+
+  // Deliberately before the upload. The upload is the expensive part: an
+  // unthrottled caller can push unbounded storage into a bucket that is billed
+  // per GB, and a file that passes validation still costs real bytes.
+  //
+  // Keyed on the session user rather than the address, because a shared or
+  // NAT'd address — a hospital network, a mobile carrier CGNAT — would
+  // otherwise throttle unrelated patients as one.
+  const refused = await registrationAttempts.check(`patient:${userId}`);
+
+  if (refused) throw new Error(refused);
 
   // Upload file ->  // https://appwrite.io/docs/references/cloud/client-web/storage#createFile
   let file;

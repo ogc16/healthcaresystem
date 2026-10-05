@@ -1,54 +1,31 @@
 "use server";
 
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { createRateLimiter } from "@/lib/auth/rate-limit";
 import {
   ADMIN_SESSION_COOKIE,
   adminSessionMaxAge,
   constantTimeEqual,
   createSessionToken,
 } from "@/lib/auth/session";
+import { createThrottle, clientAddress } from "@/lib/auth/throttle";
 
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 
 /**
- * The passkey is short enough that unlimited guessing is a real threat, so
- * attempts are throttled twice.
+ * The passkey is short enough that unlimited guessing is a real threat.
  *
- * Per address is the useful limit, but `x-forwarded-for` is client-controlled
- * on any deployment that is not behind a proxy that rewrites it, so a second
- * ceiling that keys on nothing an attacker can vary is what actually bounds
- * total guessing. Order matters: the per-address limiter is consumed first, so
- * a caller that is already locked out cannot burn the global budget and lock
- * everyone else out.
+ * Five attempts per address, plus a ceiling of fifty across all addresses. The
+ * ceiling is the one that actually holds, because `x-forwarded-for` is
+ * client-controlled on any deployment that is not behind a proxy that rewrites
+ * it, so the per-address limit alone can be sidestepped by rotating the header.
  */
-const attemptsPerAddress = createRateLimiter({
+const signInAttempts = createThrottle({
   limit: 5,
+  overallLimit: 50,
   windowMs: LOGIN_WINDOW_MS,
 });
-
-const attemptsOverall = createRateLimiter({
-  limit: 50,
-  windowMs: LOGIN_WINDOW_MS,
-});
-
-const clientAddress = async () => {
-  const store = await headers();
-
-  // Leftmost entry is the originating client when the platform appends to the
-  // header. The constant fallback keeps header-less callers in one shared
-  // bucket rather than granting each of them a fresh allowance.
-  return (
-    store.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    store.get("x-real-ip") ||
-    "unknown"
-  );
-};
-
-const lockedOutMessage = (retryAfterSeconds: number) =>
-  `Too many attempts. Try again in ${Math.max(1, Math.ceil(retryAfterSeconds / 60))} minute(s).`;
 
 export const authenticateAdmin = async (formData: FormData) => {
   const passkey = String(formData.get("passkey") ?? "");
@@ -63,19 +40,11 @@ export const authenticateAdmin = async (formData: FormData) => {
   }
 
   const address = await clientAddress();
-  const perAddress = attemptsPerAddress.consume(address);
+  const refused = await signInAttempts.check(address);
 
-  if (!perAddress.allowed) {
-    return { error: lockedOutMessage(perAddress.retryAfterSeconds) };
-  }
+  if (refused) return { error: refused };
 
-  const overall = attemptsOverall.consume("all");
-
-  if (!overall.allowed) {
-    return { error: lockedOutMessage(overall.retryAfterSeconds) };
-  }
-
-  // Compared only after the throttles, so a locked-out caller cannot use the
+  // Compared only after the throttle, so a locked-out caller cannot use the
   // response timing to probe the passkey.
   if (!constantTimeEqual(passkey, expectedPasskey)) {
     return { error: "Invalid passkey. Please try again." };
@@ -84,7 +53,7 @@ export const authenticateAdmin = async (formData: FormData) => {
   // A success clears that address so a user who fumbles a few times is not
   // locked out for the rest of the window. The overall ceiling is deliberately
   // left alone: it is a volume guard, not a per-user budget.
-  attemptsPerAddress.reset(address);
+  signInAttempts.reset(address);
 
   const maxAge = adminSessionMaxAge();
   const store = await cookies();
