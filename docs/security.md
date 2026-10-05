@@ -254,10 +254,21 @@ real PHI.
 
 ### 2. Passkey is a single shared secret
 
-One value for all admins, no per-admin identity, no rate limiting or lockout on
-`/admin/login`. Six digits is ~10^6 combinations and is brute-forceable unless
-rate-limited at the edge. Patient sign-in is likewise unthrottled — Appwrite
-applies its own limits, but there is no application-level control.
+One value for all admins, so no action can be attributed to a person, and there
+is no per-admin revocation. Six digits is a small search space.
+
+`/admin/login` is now throttled — 5 attempts per address per 15 minutes, plus an
+overall ceiling of 50 per 15 minutes, in `src/lib/auth/rate-limit.ts`. The
+overall ceiling is the load-bearing one, because `x-forwarded-for` is
+client-controlled on any deployment not behind a proxy that rewrites it, so a
+per-address limit alone can be sidestepped by rotating the header.
+
+Two limits on that protection:
+
+- The counters are **in process memory**, so they are per Node instance and reset
+  on restart. With more than one replica, each keeps its own.
+- Patient sign-in is still unthrottled. Appwrite applies its own limits, but
+  there is no application-level control.
 
 ### 3. No rate limiting on booking or registration
 
