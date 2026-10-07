@@ -42,3 +42,14 @@ export const fetchMessages = async (): Promise<
 
   return messages;
 };
+
+/**
+ * Triggers the app's SMS-outbox drain endpoint, exactly as a production cron
+ * would: GET /api/cron/sms with the configured secret. Returns the raw Next.js
+ * response so callers can assert on its status.
+ */
+export const drainSmsOutbox = async () => {
+  return fetch("http://localhost:3100/api/cron/sms", {
+    headers: { "x-cron-secret": "e2e-cron-secret-0123456789" },
+  });
+};

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { Query } from "node-appwrite";
 
 import type { Appointment } from "@/types/appwrite.types";
@@ -9,6 +11,37 @@ import {
 } from "./appwrite.config";
 
 export const APPOINTMENT_DURATION_MINUTES = 30;
+
+/**
+ * Deterministic document id for a booking slot.
+ *
+ * Derived only from `(primaryPhysician, schedule)`: two concurrent booking
+ * requests for the same slot compute the same id, so the second insert fails
+ * atomically with a 409 instead of racing around `assertNoScheduleConflict`
+ * (whose read-then-insert gap is what let a slot be double-booked).
+ *
+ * A SHA-256 prefix of the physician name keeps distinct physicians from ever
+ * collapsing onto the same id no matter how similar their names are, and using
+ * the epoch-millisecond schedule means rebooking a freed slot is a genuinely
+ * different id. The result stays well under Appwrite's 36-character id limit.
+ */
+export const appointmentDocumentId = (
+  primaryPhysician: string,
+  schedule: Date | string
+) => {
+  const scheduleMs = new Date(schedule).getTime();
+
+  if (Number.isNaN(scheduleMs)) {
+    throw new Error("Invalid appointment date");
+  }
+
+  const physicianHash = createHash("sha256")
+    .update(primaryPhysician)
+    .digest("hex")
+    .slice(0, 8);
+
+  return `book-${physicianHash}-${scheduleMs}`;
+};
 
 export class ScheduleConflictError extends Error {
   readonly primaryPhysician: string;

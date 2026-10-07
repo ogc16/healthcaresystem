@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { fetchMessages, resetMock, seedMock } from "./utils";
+import { drainSmsOutbox, fetchMessages, resetMock, seedMock } from "./utils";
 
 const schedule = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
@@ -57,7 +57,12 @@ test("an admin cancels an appointment and the patient is notified", async ({
 
   await expect(adminPage.getByText("cancelled", { exact: true })).toBeVisible();
 
-  // The update action sends an SMS to the record's owner, not the caller.
+  // The update action only writes to the SMS outbox; delivery is the cron's
+  // job. Drain it here so the assertion exercises the full queue path.
+  const drained = await drainSmsOutbox();
+  expect(drained.ok).toBe(true);
+
+  // The update action queues an SMS to the record's owner, not the caller.
   const messages = await fetchMessages();
   const sms = messages[messages.length - 1];
 

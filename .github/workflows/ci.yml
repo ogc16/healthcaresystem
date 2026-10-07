@@ -49,11 +49,41 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test
-        run: npm test
+      # Unit tests with the code-coverage floor enforced. The thresholds live
+      # in vitest.config.mts and are the measured baseline from the CI/CD
+      # hardening slice; a dip below them fails the build.
+      - name: Unit tests and coverage floor
+        run: npm run test:coverage
 
       - name: Build
         run: npm run build
+
+  # Dependency scan (informational, non-blocking) and Playwright tests run on
+  # their own jobs so a scanner finding never holds up the build.
+  dependency-scan:
+    name: dependency scan (informational)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # High-severity advisories in the tailwindcss@3 toolchain (braces,
+      # micromatch, postcss-selector-parser) currently have no fix short of a
+      # breaking upgrade to tailwindcss@4 (`npm audit fix --force`). This step
+      # stays informational until that upgrade is done; run `npm run audit`
+      # locally to review the full report.
+      - name: Audit production dependencies
+        run: npm run audit
+        continue-on-error: true
 
   e2e:
     name: end-to-end (mock appwrite)

@@ -1,20 +1,25 @@
 "use server";
 
-import { ID, Query } from "node-appwrite";
+import { ID } from "node-appwrite";
 import { InputFile } from "node-appwrite/file";
 
 import {
   BUCKET_ID,
   DATABASE_ID,
-  ENDPOINT,
   PATIENT_COLLECTION_ID,
-  PROJECT_ID,
   getDatabases,
   getStorage,
   getUsers,
 } from "../appwrite.config";
+import { recordAudit } from "../audit";
 import { requirePatient } from "../auth/guards";
 import { createThrottle } from "../auth/throttle";
+import { getPatientByUserId } from "../documents";
+import {
+  PHI_TEXT_FIELDS,
+  decryptPhiIfNeeded,
+  encryptPhiIfNeeded,
+} from "../phi-crypto";
 import { UploadValidationError, validateUpload } from "../uploads";
 import { parseStringify } from "../utils";
 
@@ -41,6 +46,14 @@ export const getUser = async () => {
 
   try {
     const user = await getUsers().get(userId);
+
+    await recordAudit({
+      action: "user.read",
+      resourceType: "user",
+      resourceId: userId,
+      actorRole: "patient",
+      actorId: userId,
+    });
 
     return parseStringify(user);
   } catch (error) {
@@ -98,21 +111,52 @@ export const registerPatient = async ({
 
   try {
     // Create new patient document -> https://appwrite.io/docs/references/cloud/server-nodejs/databases#createDocument
+    //
+    // PHI is encrypted before the document leaves the server: at rest in
+    // Appwrite it is ciphertext, and it is decrypted again only when a single
+    // authorized identity reads it back (see `getPatientByUserId`). The
+    // document's identifier is stored but its file is *never* referenced by a
+    // public Appwrite URL — `identificationDocumentUrl` points at the
+    // authorized `/api/documents` route instead.
+    const phi = Object.fromEntries(
+      PHI_TEXT_FIELDS.map((field) => [field, encryptPhiIfNeeded((patient as Record<string, unknown>)[field])])
+    );
+    const fileId = file?.$id ?? null;
+
     const newPatient = await getDatabases().createDocument(
       DATABASE_ID!,
       PATIENT_COLLECTION_ID!,
       ID.unique(),
       {
-        identificationDocumentId: file?.$id ?? null,
-        identificationDocumentUrl: file?.$id
-          ? `${ENDPOINT}/storage/buckets/${BUCKET_ID}/files/${file.$id}/view?project=${PROJECT_ID}`
-          : null,
+        identificationDocumentId: fileId,
+        identificationDocumentUrl: fileId ? `/api/documents/${fileId}` : null,
         ...patient,
+        ...phi,
         userId,
       }
     );
 
-    return parseStringify(newPatient);
+    await recordAudit({
+      action: "patient.create",
+      resourceType: "patient",
+      resourceId: newPatient.$id,
+      actorRole: "patient",
+      actorId: userId,
+    });
+
+    // Return a view of the record with encrypted fields readable again, so a
+    // client that renders the result of registration never sees ciphertext.
+    const decrypted = {
+      ...newPatient,
+      ...Object.fromEntries(
+        PHI_TEXT_FIELDS.map((field) => [
+          field,
+          decryptPhiIfNeeded((newPatient as unknown as Record<string, string>)[field] ?? ""),
+        ])
+      ),
+    };
+
+    return parseStringify(decrypted);
   } catch (error) {
     console.error("An error occurred while creating a new patient:", error);
   }
@@ -123,13 +167,19 @@ export const getPatient = async () => {
   const { userId } = await requirePatient();
 
   try {
-    const patients = await getDatabases().listDocuments(
-      DATABASE_ID!,
-      PATIENT_COLLECTION_ID!,
-      [Query.equal("userId", [userId])]
-    );
+    const patient = await getPatientByUserId(userId);
 
-    return parseStringify(patients.documents[0]);
+    if (!patient) return undefined;
+
+    await recordAudit({
+      action: "patient.read",
+      resourceType: "patient",
+      resourceId: patient.$id,
+      actorRole: "patient",
+      actorId: userId,
+    });
+
+    return parseStringify(patient);
   } catch (error) {
     console.error(
       "An error occurred while retrieving the patient details:",

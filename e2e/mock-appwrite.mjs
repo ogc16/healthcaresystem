@@ -303,6 +303,19 @@ const createDocument = async (req, res, segments) => {
   // The SDK's `documentId` lands either in the body or directly in the path;
   // the document data sits at the top level or under a `data` key.
   const documentId = String(body.documentId ?? randomId("doc"));
+  const key = documentKey(databaseId, collectionId, documentId);
+
+  // Mirrors the real server: inserting with an id that already exists is a 409,
+  // which is exactly the signal the app's deterministic-slot booking relies on
+  // to reject a double-booking race.
+  if (state.documents.has(key)) {
+    throw appwriteError(
+      409,
+      "document_already_exists",
+      "Document with the requested ID already exists"
+    );
+  }
+
   const data = body.data ?? body;
   const stored = { ...data };
   delete stored.documentId;
@@ -346,6 +359,32 @@ const createFile = async (req, res, segments) => {
     $createdAt: nowIso(),
     $updatedAt: nowIso(),
   };
+};
+
+const getFile = (req, res, segments) => {
+  const [, , , bucketId, , fileId] = segments;
+
+  return {
+    $id: fileId,
+    bucketId,
+    name: "document.png",
+    mimeType: "image/png",
+    sizeOriginal: 1,
+    signature: randomBytes(16).toString("hex"),
+    $createdAt: nowIso(),
+    $updatedAt: nowIso(),
+  };
+};
+
+const getFileDownload = (req, res, segments) => {
+  const [, , , bucketId, , fileId] = segments;
+
+  return (
+    "redirect:placeholder-bytes-for:" +
+    bucketId +
+    ":" +
+    fileId
+  );
 };
 
 const createSms = async (req, res, segments) => {
@@ -506,6 +545,25 @@ const server = createServer(async (req, res) => {
         segments[2] === "buckets"
       ) {
         result = await createFile(req, res, segments);
+      } else if (
+        method === "GET" &&
+        segments.length === 6 &&
+        segments[0] === "v1" &&
+        segments[1] === "storage" &&
+        segments[2] === "buckets" &&
+        segments[4] === "files"
+      ) {
+        result = getFile(req, res, segments);
+      } else if (
+        method === "GET" &&
+        segments.length === 7 &&
+        segments[0] === "v1" &&
+        segments[1] === "storage" &&
+        segments[2] === "buckets" &&
+        segments[4] === "files" &&
+        segments[6] === "download"
+      ) {
+        result = getFileDownload(req, res, segments);
       } else if (
         method === "POST" &&
         segments.join("/") === "v1/messaging/messages" ||

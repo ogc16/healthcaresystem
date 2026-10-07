@@ -5,20 +5,25 @@ import { ID, Query } from "node-appwrite";
 
 import { Appointment } from "@/types/appwrite.types";
 
-import { assertNoScheduleConflict } from "../appointment-slots";
+import {
+  assertNoScheduleConflict,
+  appointmentDocumentId,
+  ScheduleConflictError,
+} from "../appointment-slots";
 import {
   APPOINTMENT_COLLECTION_ID,
   DATABASE_ID,
   getDatabases,
-  getMessaging,
   missingAppwriteEnv,
 } from "../appwrite.config";
+import { recordAudit } from "../audit";
 import {
   assertCanActForPatient,
   getSession,
   isAdminSession,
 } from "../auth/guards";
 import { createThrottle } from "../auth/throttle";
+import { enqueueSms } from "../sms-outbox";
 import { formatDateTime, parseStringify } from "../utils";
 import { isValidTimeZone } from "../validation";
 
@@ -63,19 +68,76 @@ export const createAppointment = async (
     schedule: appointment.schedule,
   });
 
+  const slotId = appointmentDocumentId(
+    appointment.primaryPhysician,
+    appointment.schedule
+  );
+
+  const auditAndRespond = async (created: { $id: string }) => {
+    await recordAudit({
+      action: "appointment.create",
+      resourceType: "appointment",
+      resourceId: created.$id,
+      actorRole: session.role,
+      actorId: session.userId ?? "admin",
+      detail: `Booked ${appointment.primaryPhysician} at ${appointment.schedule.toISOString()}`,
+    });
+
+    revalidatePath("/admin");
+    return parseStringify(created);
+  };
+
   try {
     const newAppointment = await getDatabases().createDocument(
       DATABASE_ID!,
       APPOINTMENT_COLLECTION_ID!,
-      ID.unique(),
+      slotId,
       { ...appointment, userId: ownerUserId }
     );
 
-    revalidatePath("/admin");
-    return parseStringify(newAppointment);
+    return await auditAndRespond(newAppointment);
   } catch (error) {
+    // The fast pre-check above already caught the sequential double-booking.
+    // A 409 here means the check raced another insert for the same slot: the
+    // slot's deterministic id collided atomically, which is the safety net.
+    if (isSlotTakenError(error)) {
+      const existing = (await getDatabases()
+        .getDocument(DATABASE_ID!, APPOINTMENT_COLLECTION_ID!, slotId)
+        .catch(() => null)) as Appointment | null;
+
+      if (existing && existing.status !== "cancelled") {
+        throw new ScheduleConflictError(
+          appointment.primaryPhysician,
+          appointment.schedule.toISOString()
+        );
+      }
+
+      // The slot was released by a cancellation, so booking it again is
+      // legitimate. The deterministic id is still in use by the cancelled
+      // record, so fall back to a unique one. Two bookings racing in *here*
+      // are both allowed to exist only briefly: the admin scheduling step
+      // re-checks the slot before confirming either one.
+      const retried = await getDatabases().createDocument(
+        DATABASE_ID!,
+        APPOINTMENT_COLLECTION_ID!,
+        ID.unique(),
+        { ...appointment, userId: ownerUserId }
+      );
+
+      return await auditAndRespond(retried);
+    }
+
     console.error("An error occurred while creating a new appointment:", error);
   }
+};
+
+const isSlotTakenError = (error: unknown) => {
+  const candidate = error as { type?: string; status?: number };
+
+  return (
+    candidate?.type === "document_already_exists" ||
+    candidate?.status === 409
+  );
 };
 
 export type AppointmentSummary = {
@@ -175,6 +237,15 @@ export const getRecentAppointmentList = async (): Promise<RecentAppointments> =>
       documents: appointments.documents,
     };
 
+    await recordAudit({
+      action: "appointment.list",
+      resourceType: "appointment",
+      resourceId: "all",
+      actorRole: "admin",
+      actorId: "admin",
+      detail: `Admin listed ${data.totalCount} appointment(s).`,
+    });
+
     return { status: "ok", data: parseStringify(data) };
   } catch (error) {
     // Reached only when configuration is complete but the query itself failed,
@@ -190,32 +261,16 @@ export const getRecentAppointmentList = async (): Promise<RecentAppointments> =>
   }
 };
 
-//  SEND SMS NOTIFICATION
+//  SEND SMS NOTIFICATION (via the async outbox)
 /**
- * Module-private on purpose.
- *
- * Every export in a `"use server"` file is a network-reachable endpoint. While
- * this one was exported, anyone could post an arbitrary `userId` and `content`
- * and have the app send SMS to that user — a messaging-abuse and cost vector
- * that bypassed the ownership checks on the surrounding actions entirely.
- *
- * Only `updateAppointment` may send SMS, and only to the stored owner of the
- * appointment it just updated.
+ * Scheduling is decoupled from SMS delivery: `updateAppointment` only writes
+ * an `sms_outbox` record, and a cron (see /api/cron/sms) drains it with
+ * exponential backoff. That way a slow or down SMS provider can never block —
+ * or silently eat — a scheduling confirmation, and a failed message is retried
+ * instead of lost.
  */
-const sendSMSNotification = async (userId: string, content: string) => {
-  try {
-    // https://appwrite.io/docs/references/1.5.x/server-nodejs/messaging#createSms
-    const message = await getMessaging().createSms(
-      ID.unique(),
-      content,
-      [],
-      [userId]
-    );
-    return parseStringify(message);
-  } catch (error) {
-    console.error("An error occurred while sending sms:", error);
-  }
-};
+const queueSmsNotification = (userId: string, content: string) =>
+  enqueueSms({ userId, content });
 
 //  UPDATE APPOINTMENT
 export const updateAppointment = async ({
@@ -262,11 +317,20 @@ export const updateAppointment = async ({
 
     if (!updatedAppointment) throw Error;
 
+    await recordAudit({
+      action: "appointment.update",
+      resourceType: "appointment",
+      resourceId: appointmentId,
+      actorRole: session.role,
+      actorId: session.userId ?? "admin",
+      detail: `${type === "schedule" ? "Scheduled" : "Cancelled"} for ${appointment.primaryPhysician}`,
+    });
+
     const smsMessage = `Greetings from CarePulse. ${type === "schedule" ? `Your appointment is confirmed for ${formatDateTime(appointment.schedule!, timeZone).dateTime} with Dr. ${appointment.primaryPhysician}` : `We regret to inform that your appointment for ${formatDateTime(appointment.schedule!, timeZone).dateTime} is cancelled. Reason:  ${appointment.cancellationReason}`}.`;
 
     // Recipient is the record's owner. Taking it from the payload let any caller
     // send SMS to an arbitrary user id.
-    await sendSMSNotification(existing.userId, smsMessage);
+    await queueSmsNotification(existing.userId, smsMessage);
 
     revalidatePath("/admin");
     return parseStringify(updatedAppointment);
@@ -289,6 +353,14 @@ export const getAppointment = async (appointmentId: string) => {
     )) as Appointment;
 
     assertCanActForPatient(session, appointment.userId);
+
+    await recordAudit({
+      action: "appointment.read",
+      resourceType: "appointment",
+      resourceId: appointmentId,
+      actorRole: session.role,
+      actorId: session.userId ?? "admin",
+    });
 
     return parseStringify(appointment);
   } catch (error) {

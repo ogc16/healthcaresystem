@@ -92,7 +92,19 @@ const ENV_SPECS: readonly EnvSpec[] = [
   { key: "PATIENT_COLLECTION_ID", required: true, schema: identifier },
   { key: "DOCTOR_COLLECTION_ID", required: true, schema: identifier },
   { key: "APPOINTMENT_COLLECTION_ID", required: true, schema: identifier },
+  { key: "AUDIT_COLLECTION_ID", required: true, schema: identifier },
+  { key: "SMS_OUTBOX_COLLECTION_ID", required: true, schema: identifier },
   { key: "NEXT_PUBLIC_BUCKET_ID", required: true, schema: identifier },
+  {
+    key: "PHI_ENCRYPTION_KEY",
+    required: true,
+    schema: z
+      .string()
+      .regex(
+        /^[0-9a-f]{64}$/i,
+        "must be 64 hex characters (32 random bytes); generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
+      ),
+  },
   {
     key: "ADMIN_PASSKEY",
     required: true,
@@ -144,6 +156,32 @@ const ENV_SPECS: readonly EnvSpec[] = [
     key: "TWILIO_PHONE_NUMBER",
     required: false,
     schema: e164PhoneNumber,
+  },
+  {
+    key: "SMS_MAX_ATTEMPTS",
+    required: false,
+    default: "5",
+    schema: z
+      .string()
+      .regex(/^([1-9]|[12]\d|30)$/, "must be an integer between 1 and 30"),
+  },
+  {
+    key: "CRON_SECRET",
+    required: false,
+    schema: z
+      .string()
+      .min(16, "must be at least 16 characters when configured"),
+  },
+  {
+    key: "GEMINI_API_KEY",
+    required: false,
+    schema: z.string().trim().min(1, "must not be blank when configured"),
+  },
+  {
+    key: "GEMINI_MODEL",
+    required: false,
+    default: "gemini-2.5-flash",
+    schema: z.string().trim().min(1, "must not be blank when configured"),
   },
 ];
 
@@ -228,6 +266,8 @@ export const validateEnv = () => {
 
 const ENV_DEFAULTS: Record<string, string> = {
   SENTRY_TELEMETRY: "false",
+  SMS_MAX_ATTEMPTS: "5",
+  GEMINI_MODEL: "gemini-2.5-flash",
 };
 
 /**

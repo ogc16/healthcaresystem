@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   APPOINTMENT_DURATION_MINUTES,
+  appointmentDocumentId,
   findScheduleConflict,
   hasSlotOverlap,
   ScheduleConflictError,
@@ -88,5 +89,60 @@ describe("ScheduleConflictError", () => {
     expect(error.message).toContain("Dr. Smith");
     expect(error.primaryPhysician).toBe("Dr. Smith");
     expect(error.conflictingSchedule).toBe(AT);
+  });
+});
+
+describe("appointmentDocumentId", () => {
+  it("is identical for the same physician and schedule", () => {
+    expect(appointmentDocumentId("Dr. Smith", AT)).toBe(
+      appointmentDocumentId("Dr. Smith", AT)
+    );
+  });
+
+  it("is identical for an equivalent Date object", () => {
+    expect(appointmentDocumentId("Dr. Smith", AT)).toBe(
+      appointmentDocumentId("Dr. Smith", new Date(AT))
+    );
+  });
+
+  it("differs when the schedule changes", () => {
+    expect(appointmentDocumentId("Dr. Smith", AT)).not.toBe(
+      appointmentDocumentId("Dr. Smith", minutesFrom(AT, 1))
+    );
+  });
+
+  it("differs for different physicians at the same time", () => {
+    expect(appointmentDocumentId("Dr. Smith", AT)).not.toBe(
+      appointmentDocumentId("Dr. Green", AT)
+    );
+  });
+
+  it("is name-independent for near-identical physician names", () => {
+    // Two distinct names must never collapse onto the same id, even when a
+    // naive slug would truncate them identically.
+    expect(appointmentDocumentId("Dr. Smith-Johnson-Peterson", AT)).not.toBe(
+      appointmentDocumentId("Dr. Smith-Johnson-Peterson-Winters", AT)
+    );
+  });
+
+  it("embeds epoch milliseconds so a freed slot is a fresh id", () => {
+    expect(appointmentDocumentId("Dr. Smith", AT)).toContain(
+      String(new Date(AT).getTime())
+    );
+    expect(appointmentDocumentId("Dr. Smith", AT)).toMatch(
+      /^book-[0-9a-f]{8}-\d{13}$/
+    );
+  });
+
+  it("stays within Appwrite's 36 character id limit", () => {
+    expect(appointmentDocumentId("Dr. Smith", AT).length).toBeLessThanOrEqual(
+      36
+    );
+  });
+
+  it("rejects an unparseable schedule", () => {
+    expect(() => appointmentDocumentId("Dr. Smith", "not-a-date")).toThrow(
+      "Invalid appointment date"
+    );
   });
 });

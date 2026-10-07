@@ -20,6 +20,8 @@ export interface Patient extends Models.Document {
   pastMedicalHistory: string | undefined;
   identificationType: string | undefined;
   identificationNumber: string | undefined;
+  identificationDocumentId: string | null;
+  identificationDocumentUrl: string | null;
   identificationDocument: FormData | undefined;
   privacyConsent: boolean;
 }
@@ -33,4 +35,13 @@ export interface Appointment extends Models.Document {
   note: string;
   userId: string;
   cancellationReason: string | null;
+}
+
+export interface SmsOutbox extends Models.Document {
+  userId: string;
+  content: string;
+  status: "pending" | "sent" | "failed";
+  attempts: number;
+  nextAttemptAt: string;
+  lastError: string;
 }

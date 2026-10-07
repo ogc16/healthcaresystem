@@ -17,9 +17,13 @@ const appEnv = {
   PATIENT_COLLECTION_ID: "test-patients",
   DOCTOR_COLLECTION_ID: "test-doctors",
   APPOINTMENT_COLLECTION_ID: "test-appointments",
+  AUDIT_COLLECTION_ID: "test-audit",
+  SMS_OUTBOX_COLLECTION_ID: "test-sms-outbox",
   NEXT_PUBLIC_BUCKET_ID: "test-bucket",
+  PHI_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   ADMIN_PASSKEY: "123456",
   SESSION_SECRET: "e2e-session-secret-0123456789abcdef0123456",
+  CRON_SECRET: "e2e-cron-secret-0123456789",
   SENTRY_TELEMETRY: "false",
   STRICT_ENV: "true",
 };

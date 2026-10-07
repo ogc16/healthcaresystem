@@ -39,7 +39,10 @@ const setComplete = () => {
   process.env.PATIENT_COLLECTION_ID = "patients";
   process.env.DOCTOR_COLLECTION_ID = "doctors";
   process.env.APPOINTMENT_COLLECTION_ID = "appointments";
+  process.env.AUDIT_COLLECTION_ID = "audit";
+  process.env.SMS_OUTBOX_COLLECTION_ID = "sms_outbox";
   process.env.NEXT_PUBLIC_BUCKET_ID = "bucket";
+  process.env.PHI_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
   process.env.ADMIN_PASSKEY = "123456";
   process.env.SESSION_SECRET = "a-32-character-secret-0123456789abcdef";
 };
@@ -158,6 +161,84 @@ describe("parseEnv", () => {
     );
   });
 
+  it("rejects a PHI encryption key that is not 64 hex characters", () => {
+    clearAll();
+    process.env.PHI_ENCRYPTION_KEY = "too-short";
+
+    const { invalid } = parseEnv(process.env);
+
+    expect(invalid).toContainEqual(
+      expect.objectContaining({ name: "PHI_ENCRYPTION_KEY" })
+    );
+  });
+
+  it("treats an absent audit collection id as missing", () => {
+    clearAll();
+
+    const { missing } = parseEnv(process.env);
+
+    expect(missing).toContain("AUDIT_COLLECTION_ID");
+  });
+
+  it("treats an absent sms outbox collection id as missing", () => {
+    clearAll();
+
+    const { missing } = parseEnv(process.env);
+
+    expect(missing).toContain("SMS_OUTBOX_COLLECTION_ID");
+  });
+
+  it("rejects a max-attempts value outside 1..30", () => {
+    clearAll();
+    process.env.SMS_MAX_ATTEMPTS = "0";
+
+    const { invalid } = parseEnv(process.env);
+
+    expect(invalid).toContainEqual(
+      expect.objectContaining({ name: "SMS_MAX_ATTEMPTS" })
+    );
+  });
+
+  it("rejects a short CRON_SECRET when one is set", () => {
+    clearAll();
+    process.env.CRON_SECRET = "short";
+
+    const { invalid } = parseEnv(process.env);
+
+    expect(invalid).toContainEqual(
+      expect.objectContaining({ name: "CRON_SECRET" })
+    );
+  });
+
+  it("treats an absent Gemini key as an unset optional", () => {
+    clearAll();
+
+    const { missing, invalid, values } = parseEnv(process.env);
+
+    expect(missing).not.toContain("GEMINI_API_KEY");
+    expect(invalid).toEqual([]);
+    expect(values.GEMINI_API_KEY).toBeUndefined();
+  });
+
+  it("applies the default Gemini model when the variable is absent", () => {
+    clearAll();
+
+    const { values } = parseEnv(process.env);
+
+    expect(values.GEMINI_MODEL).toBe("gemini-2.5-flash");
+  });
+
+  it("rejects a blank Gemini model when one is set", () => {
+    clearAll();
+    process.env.GEMINI_MODEL = " ";
+
+    const { invalid } = parseEnv(process.env);
+
+    expect(invalid).toContainEqual(
+      expect.objectContaining({ name: "GEMINI_MODEL" })
+    );
+  });
+
   it("applies the telemetry default when the variable is absent", () => {
     clearAll();
 
@@ -197,6 +278,12 @@ describe("env accessor", () => {
     clearAll();
 
     expect(env.SENTRY_TELEMETRY).toBe("false");
+  });
+
+  it("applies the Gemini model default", () => {
+    clearAll();
+
+    expect(env.GEMINI_MODEL).toBe("gemini-2.5-flash");
   });
 });
 
