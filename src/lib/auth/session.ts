@@ -1,3 +1,5 @@
+import { env } from "@/lib/env";
+
 const encoder = new TextEncoder();
 
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
@@ -56,7 +58,7 @@ export const constantTimeEqual = (left: string, right: string) => {
 };
 
 const getSessionSecret = () => {
-  const secret = process.env.SESSION_SECRET;
+  const secret = env.SESSION_SECRET;
 
   if (!secret) throw new Error("SESSION_SECRET is not set");
 

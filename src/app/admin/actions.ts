@@ -10,6 +10,7 @@ import {
   createSessionToken,
 } from "@/lib/auth/session";
 import { createThrottle, clientAddress } from "@/lib/auth/throttle";
+import { env } from "@/lib/env";
 
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 
@@ -29,7 +30,7 @@ const signInAttempts = createThrottle({
 
 export const authenticateAdmin = async (formData: FormData) => {
   const passkey = String(formData.get("passkey") ?? "");
-  const expectedPasskey = process.env.ADMIN_PASSKEY ?? "";
+  const expectedPasskey = env.ADMIN_PASSKEY;
 
   // Returned, not thrown: an uncaught error in a server action tears down the
   // page to the global error boundary, which tells the user nothing about what

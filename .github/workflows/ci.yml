@@ -54,3 +54,27 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  e2e:
+    name: end-to-end (mock appwrite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Chromium is bundled with Playwright; the mock Appwrite server and the
+      # Next dev server are started by the Playwright config's webServer.
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run e2e tests
+        run: npx playwright test

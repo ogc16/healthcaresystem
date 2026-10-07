@@ -1,15 +1,18 @@
 import * as sdk from "node-appwrite";
 
-export const {
-  NEXT_PUBLIC_ENDPOINT: ENDPOINT,
-  PROJECT_ID,
-  API_KEY,
-  DATABASE_ID,
-  PATIENT_COLLECTION_ID,
-  DOCTOR_COLLECTION_ID,
-  APPOINTMENT_COLLECTION_ID,
-  NEXT_PUBLIC_BUCKET_ID: BUCKET_ID,
-} = process.env;
+import { env } from "./env";
+
+// Values come from the central schema in `env.ts`, which also knows each
+// variable's required status and expected shape. A missing variable reads as
+// `""`, so the `requireEnv` guards below still fail loudly and by name.
+export const ENDPOINT = env.NEXT_PUBLIC_ENDPOINT;
+export const PROJECT_ID = env.PROJECT_ID;
+export const API_KEY = env.API_KEY;
+export const DATABASE_ID = env.DATABASE_ID;
+export const PATIENT_COLLECTION_ID = env.PATIENT_COLLECTION_ID;
+export const DOCTOR_COLLECTION_ID = env.DOCTOR_COLLECTION_ID;
+export const APPOINTMENT_COLLECTION_ID = env.APPOINTMENT_COLLECTION_ID;
+export const BUCKET_ID = env.NEXT_PUBLIC_BUCKET_ID;
 
 /**
  * Fails loudly, and by name.
