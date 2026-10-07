@@ -17,11 +17,36 @@ import { parseStringify } from "../utils";
 import { LoginSchema, PatientAccountSchema } from "../validation";
 
 const HOUR_MS = 60 * 60 * 1000;
+const FIFTEEN_MINUTES = 15 * 60 * 1000;
 
 const accountCreation = createThrottle({
   limit: 5,
   overallLimit: 50,
   windowMs: HOUR_MS,
+});
+
+/**
+ * Sign-in is throttled on two subjects at once.
+ *
+ * Address alone is not enough: a botnet has plenty of addresses. Email alone is
+ * not enough either, because it hands an attacker a lockout lever — fire a few
+ * doomed attempts at a known address and its owner cannot sign in until the
+ * window expires. Together they hold both directions: the email tier slows
+ * targeted guessing, and the address tier plus the global ceiling still binds
+ * someone rotating one or the other.
+ *
+ * The window is 15 minutes rather than an hour to keep that lockout lever
+ * short. A patient password is a far larger search space than the six-digit
+ * admin passkey, so the per-email allowance can be more generous than the
+ * admin's five and still slow guessing to an impractical rate.
+ *
+ * The email is lowercased so `Alice@example.com` and `alice@example.com` share
+ * one bucket rather than each getting their own.
+ */
+const signInAttempts = createThrottle({
+  limit: 10,
+  overallLimit: 100,
+  windowMs: FIFTEEN_MINUTES,
 });
 
 /**
@@ -132,6 +157,15 @@ export const loginPatient = async (input: unknown, returnTo?: string) => {
     return { error: "Enter your email and password." };
   }
 
+  // Before the upstream call, so a throttled caller cannot use Appwrite as an
+  // unlimited guessing oracle. Checked after parsing so a malformed payload does
+  // not spend an attempt.
+  const address = await clientAddress();
+  const subjects = [address, parsed.data.email.toLowerCase()];
+  const refused = await signInAttempts.check(subjects);
+
+  if (refused) return { error: refused };
+
   try {
     await issuePatientSession(parsed.data.email, parsed.data.password);
   } catch (error: unknown) {
@@ -145,6 +179,10 @@ export const loginPatient = async (input: unknown, returnTo?: string) => {
 
     return { error: "Unable to sign in right now. Please try again." };
   }
+
+  // A successful sign-in clears both keys, so someone who mistyped a few times
+  // is not locked out of their own account for the rest of the window.
+  signInAttempts.reset(subjects);
 
   redirect(safeReturnPath(returnTo));
 };

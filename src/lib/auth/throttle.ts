@@ -10,9 +10,13 @@ import { createRateLimiter } from "./rate-limit";
  * abuse when the subject is something the caller can influence.
  *
  * Subjects are consumed in order and the global tier is only reached if the
- * subject tier passed. The reverse order would let a caller who is already
+ * subject tiers passed. The reverse order would let a caller who is already
  * throttled keep burning the global budget, and a single abuser could then lock
  * every other user out.
+ *
+ * More than one subject may be checked at once — sign-in keys on both the
+ * client address and the attempted email. They share a single global tier, so
+ * checking two subjects costs one attempt rather than two.
  */
 export const createThrottle = ({
   limit,
@@ -28,10 +32,12 @@ export const createThrottle = ({
 
   return {
     /** Resolves to `null` when permitted, or a user-facing message when not. */
-    check: async (subject: string) => {
-      const forSubject = perSubject.consume(subject);
+    check: async (subject: string | readonly string[]) => {
+      for (const key of typeof subject === "string" ? [subject] : subject) {
+        const decision = perSubject.consume(key);
 
-      if (!forSubject.allowed) return refusal(forSubject.retryAfterSeconds);
+        if (!decision.allowed) return refusal(decision.retryAfterSeconds);
+      }
 
       const forEveryone = overall.consume("all");
 
@@ -41,7 +47,11 @@ export const createThrottle = ({
     },
 
     /** Call after a successful action so a legitimate retry is not penalised. */
-    reset: (subject: string) => perSubject.reset(subject),
+    reset: (subject: string | readonly string[]) => {
+      for (const key of typeof subject === "string" ? [subject] : subject) {
+        perSubject.reset(key);
+      }
+    },
   };
 };
 

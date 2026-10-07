@@ -12,7 +12,7 @@ Node 22, `ubuntu-latest`, 15-minute timeout. Concurrent runs to the same ref are
 cancelled, so a rapid series of pushes does not queue four full builds. The
 workflow requests `contents: read` and nothing else — CI never needs write access.
 
-Current status: **green**. 96 tests across 7 files.
+Current status: **green**. 102 tests across 7 files.
 
 ## Running the gates locally
 

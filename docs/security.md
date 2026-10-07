@@ -257,24 +257,24 @@ real PHI.
 One value for all admins, so no action can be attributed to a person, and there
 is no per-admin revocation. Six digits is a small search space.
 
-`/admin/login` is now throttled — 5 attempts per address per 15 minutes, plus an
-overall ceiling of 50 per 15 minutes, in `src/lib/auth/rate-limit.ts`. The
+`/admin/login` is throttled — 5 attempts per address per 15 minutes, plus an
+overall ceiling of 50 per 15 minutes, through `src/lib/auth/throttle.ts`. The
 overall ceiling is the load-bearing one, because `x-forwarded-for` is
 client-controlled on any deployment not behind a proxy that rewrites it, so a
 per-address limit alone can be sidestepped by rotating the header.
 
-Patient sign-in is still unthrottled; Appwrite applies its own limits, but there
-is no application-level control. See gap 3.
+Patient sign-in is throttled too — see gap 3.
 
-### 3. Rate limiting is in-process, and patient sign-in has none
+### 3. Rate limiting is in-process
 
-Booking, registration, and account creation are now throttled through
-`src/lib/auth/throttle.ts`, which composes a per-subject allowance with a global
-ceiling:
+Booking, registration, account creation, and patient sign-in are throttled
+through `src/lib/auth/throttle.ts`, which composes per-subject allowances with a
+global ceiling:
 
 | Action | Per subject | Ceiling | Window |
 | --- | --- | --- | --- |
 | Admin sign-in | 5 per address | 50 | 15 min |
+| Patient sign-in | 10 per address **and** per email | 100 | 15 min |
 | Account creation | 5 per address | 50 | 1 hour |
 | Patient registration | 5 per patient | 100 | 1 hour |
 | Appointment booking | 10 per acting identity | 200 | 1 hour |
@@ -283,16 +283,24 @@ Session-backed actions are keyed on the signed user id rather than the address,
 so a shared or NAT'd address does not throttle unrelated patients. Account
 creation has no session yet, so it is keyed on the address.
 
+Sign-in checks two subjects at once: the attempted email slows targeted
+guessing, and the address tier plus the global ceiling binds someone rotating
+one or the other. Either alone has a hole — a botnet has plenty of addresses,
+and a pure email key hands an attacker a lockout lever against the account's
+real owner. Both tiers share one global slot per attempt rather than charging it
+twice. The email is lowercased so `Alice@example.com` and `alice@example.com`
+draw from the same bucket. The 15-minute window keeps that lockout lever short;
+a patient password is a much larger search space than the six-digit admin
+passkey, so it can be allowed ten guesses and still be impractical to guess.
+
 Registration is throttled **before** the upload, since the upload is the
 expensive part and storage is billed per GB. Booking is keyed on the acting
 identity, so an admin booking on a patient's behalf is charged to the admin.
 
-Remaining limitations:
-
-- The counters are **in process memory**, so they are per Node instance and reset
-  on restart. With more than one replica, each keeps its own.
-- **Patient sign-in is still unthrottled.** Appwrite applies its own limits, but
-  there is no application-level control. This is the next one to close.
+The remaining limitation is that the counters are **in process memory**: per
+Node instance, reset on restart, and each replica keeps its own on a multi-node
+deployment. `RateLimiter` is an interface, so moving to Redis or
+`@upstash/ratelimit` is a local change with no call-site edits.
 
 ### 4. Session revocation is not immediate
 

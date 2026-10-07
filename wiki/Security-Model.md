@@ -18,13 +18,15 @@ and which are missing. The short version:
 | Signed, httpOnly, role-scoped sessions | **Done** |
 | Upload validation by content signature | **Done** |
 | Open-redirect prevention | **Done** |
-| Admin sign-in rate limiting | **Done**, in-process only |
+| Rate limiting on auth, booking, uploads | **Done**, in-process counters only |
 | Audit log | **Missing** |
 | Field-level encryption of PHI | **Missing** |
 | Multi-admin identity | **Missing** (one shared secret) |
 | Session revocation before expiry | **Missing** |
 
-The three missing items are why this must not hold real PHI yet. See
+Four rows are missing, and the first three are the hard blockers: without an
+audit log, without per-admin identity there is nobody to attribute an entry to,
+and without encryption the PHI is at rest in plaintext. See
 [Roadmap and Open Gaps](Roadmap.md).
 
 ## Admin authentication
@@ -80,35 +82,61 @@ every throttled action uses:
 | Action | Per subject | Ceiling | Window |
 | --- | --- | --- | --- |
 | Admin sign-in | 5 per address | 50 | 15 min |
+| Patient sign-in | 10 per address **and** per email | 100 | 15 min |
 | Account creation | 5 per address | 50 | 1 hour |
 | Patient registration | 5 per patient | 100 | 1 hour |
 | Appointment booking | 10 per acting identity | 200 | 1 hour |
 
-For admin sign-in, the two tiers are:
-
 The overall ceiling is the one that actually holds. `x-forwarded-for` is
 client-controlled on any deployment not behind a proxy that rewrites it, so the
-per-address limit alone can be sidestepped by rotating the header. Per-address is
-consumed **first**, so a caller who is already locked out cannot burn the global
-budget and lock everyone else out. That ordering is asserted in
+per-address limit alone can be sidestepped by rotating the header. Subject tiers
+are consumed **first**, so a caller who is already locked out cannot burn the
+global budget and lock everyone else out. That ordering is asserted in
 `throttle.test.ts`, because reversing it is a cross-user denial of service.
 
 Session-backed actions key on the signed user id instead of the address. A
 hospital network or a mobile carrier behind CGNAT shares one address among many
 unrelated patients, so an address key there would throttle strangers together.
 
+### Why patient sign-in checks two subjects
+
+Both have a hole on their own:
+
+- **Address only** — a botnet has plenty of addresses.
+- **Email only** — the owner of that address could be locked out of their own
+  account by a handful of doomed attempts, turning a defence into a denial-of-
+  service lever.
+
+Together they cover both. The email tier slows targeted guessing, the address
+tier plus the ceiling binds someone rotating one or the other, and the
+15-minute window keeps that lockout lever short. Both tiers share **one** global
+slot per attempt; charging each separately would silently halve the ceiling.
+
+The email is lowercased, so `Alice@example.com` and `alice@example.com` draw
+from the same bucket rather than each getting their own allowance.
+
+A patient password is a far larger search space than the six-digit admin
+passkey, so ten guesses per address and per email remains impractical to guess
+while leaving headroom for someone who mistypes a few times.
+
+### Placement
+
 - **Registration is throttled before the upload.** The upload is the expensive
   part, storage is billed per GB, and a file that passes validation still costs
   real bytes. Checking afterwards would leave the cost unmetered.
 - **Booking is keyed on the acting identity.** An admin booking on a patient's
   behalf is charged to the admin, not to the patient who did nothing.
+- **Sign-in is throttled before the upstream call**, so a refused caller cannot
+  use Appwrite as an unlimited guessing oracle, but after parsing, so a
+  malformed payload does not spend an attempt.
 
 Design details that are deliberate, and easy to undo by accident:
 
-- The passkey is compared only after both throttles pass, so a locked-out caller
+- The passkey is compared only after the throttle passes, so a locked-out caller
   cannot use response timing as an oracle.
-- A successful login clears that address, so someone who fumbles a few times is
-  not locked out for the rest of the window. The global ceiling is not reset.
+- A successful login clears every key it checked, so someone who fumbles a few
+  times is not locked out for the rest of the window. The global ceiling is not
+  reset — it is a volume guard, not a per-user budget.
 - **Refused attempts do not extend the window.** Otherwise hammering during a
   lockout turns a 15-minute delay into a permanent ban.
 
@@ -119,10 +147,6 @@ makes online guessing tedious against a single instance. It is not a shared
 store, so with more than one replica each keeps its own counters, and a restart
 resets them. `RateLimiter` is an interface, so swapping in Redis or
 `@upstash/ratelimit` is a local change.
-
-Booking, registration, and account creation are throttled. **Patient sign-in is
-not**, at the application layer; Appwrite applies its own limits. See the
-Roadmap.
 
 ## Patient authentication
 
@@ -232,9 +256,10 @@ Detailed in [Roadmap and Open Gaps](Roadmap.md). In brief:
 4. **Session revocation is not immediate.** A stolen cookie is accepted until its
    8-hour expiry. The proxy and guards check the signature and expiry but do not
    ask Appwrite whether the session is still live.
-5. **Patient sign-in is unthrottled at the application layer.** Booking,
-   registration, and account creation are now throttled; this one is not.
-   Appwrite applies its own limits, but there is no application-level control.
+5. **Rate-limit counters are in-process.** Every endpoint above is throttled,
+   but the counters live in each Node process: reset on restart, and one per
+   replica on a multi-node deployment. Fine on a single instance, not a control
+   worth relying on at scale.
 6. **`timeZone` is client-asserted.** Validated as a real IANA zone, but it still
    originates in the browser. It only formats the SMS reminder, so it is
    cosmetic and must never gate anything security-relevant.

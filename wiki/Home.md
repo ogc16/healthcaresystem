@@ -59,7 +59,7 @@ dashboard. Built on Next.js 16 (App Router) and Appwrite.
 
 ## Status
 
-Green on every push: typecheck, lint, 96 unit tests, and a production build all
+Green on every push: typecheck, lint, 102 unit tests, and a production build all
 run in CI on `main`.
 
 **This is not a HIPAA-compliant system and must not handle real patient data

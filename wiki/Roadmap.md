@@ -10,12 +10,11 @@ building as originally proposed.
 | Admin dashboard crash fix | `getRecentAppointmentList` returned `undefined`, so `admin/page.tsx` read a property off it and threw a `TypeError`. Now returns an empty result |
 | `next-themes` removed | It injected `class` and `color-scheme` on `<html>` from `localStorage`, causing a hydration mismatch. Nothing consumed the class: no `.light`/`.dark` rules, no `dark:` variants, no `useTheme` calls |
 | Admin sign-in no longer throws | An uncaught error in a server action tears down the page to the global error boundary and leaked the missing variable name to the browser. Now returns a form error |
-| Rate limiting on admin sign-in | 5/address and 50 overall per 15 minutes, with tests |
-| Rate limiting on booking and registration | Shared throttle helper; booking, registration, and account creation all bounded. Registration is metered before the upload |
+| Rate limiting across auth and writes | Shared throttle helper with a per-subject allowance plus a global ceiling. Covers admin sign-in, patient sign-in (address *and* email), account creation, registration, and booking. Registration is metered before the upload |
 | Sentry no longer reports to a third party | The committed upstream DSN is gone from all three configs. Reporting is off unless `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` are set |
 | Configuration reported explicitly | Missing variables are named on the dashboard instead of rendering zeroes |
 | CI workflow | typecheck, lint, test, build on every push |
-| 96 unit tests | Security invariants: sessions, redirects, uploads, booking conflicts, rate limits, throttle ordering, config |
+| 102 unit tests | Security invariants: sessions, redirects, uploads, booking conflicts, rate limits, throttle ordering, config |
 
 ## Blocking deployment with real patient data
 
@@ -99,20 +98,21 @@ Needs a queue with retry and backoff.
 BullMQ needs a persistent Redis *and* a worker process that stays alive. It does
 not run on serverless. Do not build BullMQ for a Vercel deployment.
 
-### Rate limiting is in-process, and patient sign-in has none
+### Rate limiting is in-process
 
-Booking, registration, and account creation are throttled, via
-`src/lib/auth/throttle.ts`, which composes a per-subject allowance with a global
-ceiling. Two things are still open:
+Auth, booking, registration, and uploads are all throttled through
+`src/lib/auth/throttle.ts`, which composes per-subject allowances with a global
+ceiling — including patient sign-in, which keys on both the attempted email and
+the client address.
 
-- The counters are **in process memory**: per Node instance, reset on restart. On
-  more than one replica each keeps its own. This is the whole reason the limiter
-  is behind a small interface — swap in Redis or `@upstash/ratelimit` and no call
-  site changes.
-- **Patient sign-in is unthrottled** at the application layer. Account creation
-  is now limited, which closes the cheaper abuse path, but sign-in against a
-  known email still gets only Appwrite's own protections. This is the next one to
-  close, and it is the same shape as the rest.
+What remains is where the counters live. They are in process memory: per Node
+instance, reset on restart, one set per replica on a multi-node deployment. That
+is acceptable for a single instance and unreliable beyond one.
+
+The fix is Redis or `@upstash/ratelimit`, behind the existing `RateLimiter`
+interface so no call site changes. Whether that is worth provisioning depends on
+the deployment target, which is still undecided — the same question that gates
+the SMS queue. Do not add a Redis dependency before the platform is settled.
 
 ### Multi-step registration loses progress on refresh
 
