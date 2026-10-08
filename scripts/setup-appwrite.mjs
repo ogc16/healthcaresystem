@@ -204,9 +204,11 @@ async function ensureBucket() {
 }
 
 async function ensureAuditLog() {
-  const exists = await ensureCollection(AUDIT_COLLECTION_ID, "audit_log");
-
-  if (exists) return;
+  // Collection exists check gates the doc says what the collection is FOR;
+  // the attributes are added through the idempotent ensure* helpers so a
+  // re-run here also upgrades a pre-existing audit_log that predates the
+  // hash chain.
+  await ensureCollection(AUDIT_COLLECTION_ID, "audit_log");
 
   await ensureString(AUDIT_COLLECTION_ID, "action", 64, true);
   await ensureString(AUDIT_COLLECTION_ID, "resourceType", 32, true);
@@ -214,6 +216,11 @@ async function ensureAuditLog() {
   await ensureString(AUDIT_COLLECTION_ID, "actorRole", 16, true);
   await ensureString(AUDIT_COLLECTION_ID, "actorId", 255, true);
   await ensureString(AUDIT_COLLECTION_ID, "detail", 2000, false, "");
+  await ensureString(AUDIT_COLLECTION_ID, "ip", 255, true, "unknown");
+  await ensureInteger(AUDIT_COLLECTION_ID, "seq", true, 0);
+  await ensureString(AUDIT_COLLECTION_ID, "prevHash", 64, true, "");
+  await ensureString(AUDIT_COLLECTION_ID, "hash", 64, true, "");
+  await ensureDatetime(AUDIT_COLLECTION_ID, "occurredAt", true);
 
   console.log(
     "  NOTE: lock the audit_log collection to update/delete in the console;",

@@ -145,6 +145,24 @@ const parseQuery = (value) => {
   };
 };
 
+// Ordering is over datetimes in this app, except the audit chain's monotonic
+// `seq`, which is a plain integer. Comparing with a date fall-through keeps
+// numeric sorting deterministic instead of going through `new Date(number)`'s
+// Invalid Date path.
+const numericOrDate = (value) => {
+  if (typeof value === "number") return value;
+
+  if (
+    typeof value === "string" &&
+    value.trim() !== "" &&
+    !isNaN(Number(value))
+  ) {
+    return Number(value);
+  }
+
+  return new Date(value).getTime();
+};
+
 const filterByQuery = (docs, queries) => {
   let result = [...docs];
 
@@ -179,14 +197,14 @@ const filterByQuery = (docs, queries) => {
       case "orderDesc": {
         result = [...result].sort(
           (a, b) =>
-            new Date(b[attribute]).getTime() - new Date(a[attribute]).getTime()
+            numericOrDate(b[attribute]) - numericOrDate(a[attribute])
         );
         break;
       }
       case "orderAsc": {
         result = [...result].sort(
           (a, b) =>
-            new Date(a[attribute]).getTime() - new Date(b[attribute]).getTime()
+            numericOrDate(a[attribute]) - numericOrDate(b[attribute])
         );
         break;
       }
