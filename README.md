@@ -189,27 +189,49 @@ flowchart TB
     end
 
     subgraph "Next.js Server"
-        MW[Proxy]
+        MW[Proxy - session cookie shell check]
         Pages[App Router Pages]
         Actions[Server Actions]
-        Auth[Auth Session Module]
+        Auth[Auth: guards + HMAC session]
+        FeldEncrypt[PHI field encryption AES-256-GCM]
+        Hydration[Batched patient hydration]
+        Audit[Hash-chained audit ledger]
+        SmsCron[/api/cron/sms - drains outbox]
+        DocRoute[/api/documents/{fileId} - authorized stream]
+        Triage[/api/ai/triage - urgency verdict]
     end
 
     subgraph Appwrite
-        DB[(Databases)]
+        DB[(Collections: patients, appointments, doctors,\naudit_log, sms_outbox)]
         Storage[(Storage Bucket)]
         SMS[Messaging]
+        Users[Users API]
     end
 
-    UI -->|HTTP request| MW
+    subgraph External
+        Scheduler[(Cron trigger - calls SmsCron with x-cron-secret)]
+        Gemini[Gemini API]
+    end
+
+    UI -->|HTTP / server action| MW
     MW -->|verify session cookie| Auth
     UI -->|invoke server action| Actions
     Pages --> Actions
     Pages -->|verify session| Auth
     Actions -->|authorization check| Auth
+    Actions -->|encrypt before write / decrypt on read| FeldEncrypt
+    Actions -->|batch equal($id) lookups| Hydration
+    Actions -->|every PHI access logged| Audit
     Actions --> DB
     Actions --> Storage
-    Actions --> SMS
+    Actions --> Users
+    Actions -->|enqueueSms| DB
+    SmsCron -->|drainSmsOutbox| DB
+    SmsCron --> SMS
+    DocRoute -->|getDocumentBytes + audit document.read| Storage
+    DocRoute --> Audit
+    Triage --> Gemini
+    Scheduler --> SmsCron
 ```
 
 ### State diagram — appointment lifecycle

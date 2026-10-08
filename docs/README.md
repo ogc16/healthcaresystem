@@ -5,6 +5,8 @@
 | [architecture.md](architecture.md) | Directory layout, request flow, data access |
 | [security.md](security.md) | Admin and patient auth model, proxy, known open gaps |
 | [environment.md](environment.md) | Every environment variable and what it grants |
+| [adr/](adr/README.md) | Architecture Decision Records |
+| [openapi.yaml](openapi.yaml) | Interactive spec for the HTTP route handlers |
 
 ## Quick start
 

@@ -1,0 +1,286 @@
+openapi: 3.0.3
+
+info:
+  title: CarePulse HTTP API
+  version: 0.3.0
+  description: |
+    The HTTP surface of the CarePulse app: route handlers the deployment and
+    external services call. This spec covers the endpoint routes only.
+
+    Every *mutation* in the app is a Next.js server action (`"use server"`),
+    not a route in this spec: those are validated, authorised, rate-limited and
+    audited by the action modules (see `docs/adr/ADR-007`). Route handlers are
+    the thin HTTP layers over the same modules — the SMS drain cron and the
+    document stream.
+
+    Session auth is cookie-based (`hcs_admin_session` / `hcs_patient_session`,
+    see `docs/adr/ADR-002`). The cron endpoint does not use sessions; it
+    authenticates with the `x-cron-secret` header and fails closed when the
+    deployment has not configured `CRON_SECRET`.
+
+    Interactive rendering: paste this file into https://editor.swagger.io or
+    open it with any OpenAPI viewer (Redoc, Swagger UI).
+
+servers:
+  - url: http://localhost:3100
+    description: Local development (matches the e2e web server port)
+
+paths:
+  /api/cron/sms:
+    get:
+      operationId: drainSmsOutbox
+      summary: Drain the SMS outbox (scheduled job)
+      description: |
+        Delivers any queued, pending SMS whose retry window has elapsed. Call
+        from a scheduler (Appwrite function, platform cron, GitHub Actions
+        schedule) on a fixed interval. Fails closed (503) when `CRON_SECRET` is
+        not configured, and rejects (401) any call without a matching
+        `x-cron-secret` header.
+      parameters:
+        - name: x-cron-secret
+          in: header
+          required: true
+          schema:
+            type: string
+          description: Must match the deployment's `CRON_SECRET`.
+      responses:
+        "200":
+          description: Outbox drained; per-message outcomes reported.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - sent
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+                  sent:
+                    type: array
+                    description: One entry per message processed this run.
+                    items:
+                      type: object
+                      required:
+                        - $id
+                        - outcome
+                        - attempts
+                      properties:
+                        $id:
+                          type: string
+                          description: Appwrite document id of the outbox row.
+                        outcome:
+                          type: string
+                          enum:
+                            - sent
+                            - retry
+                            - failed
+                        attempts:
+                          type: integer
+                          minimum: 0
+                          description: Delivery attempts made so far.
+        "401":
+          description: Missing or non-matching `x-cron-secret`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    const: false
+                  error:
+                    type: string
+        "503":
+          description: "`CRON_SECRET` is not configured; the drain is disabled."
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    const: false
+                  error:
+                    type: string
+        "500":
+          description: The drain itself failed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    const: false
+                  error:
+                    type: string
+
+  /api/documents/{fileId}:
+    get:
+      operationId: streamDocument
+      summary: Stream an uploaded identification document
+      description: |
+        The only way to fetch an uploaded document. Enforces the same ownership
+        rule as the rest of the app: a signed-in patient may fetch their own
+        document, an admin may fetch any. Documents are never served from a
+        public Appwrite URL. The read is recorded in the audit ledger.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Appwrite storage file id.
+      responses:
+        "200":
+          description: The document bytes with its stored media type.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: inline; filename="..."
+            Cache-Control:
+              schema:
+                type: string
+                const: private, no-store
+          content:
+            "*/*":
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Missing file id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: No valid session cookie.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Authenticated but not allowed to read this file.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: File does not exist or could not be read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/ai/triage:
+    post:
+      operationId: triagePatientMessage
+      summary: Urgency-triage a patient message
+      description: |
+        Asks the configured Gemini model to rate a patient message urgent or
+        routine. Never blocks: an unavailable or unconfigured model, or
+        malformed model output, degrades to a `routine` verdict with
+        `source: "fallback"` instead of an error.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+              properties:
+                message:
+                  type: string
+                  minLength: 1
+                  maxLength: 10000
+                  description: Patient message, truncated to 4000 chars before the model.
+      responses:
+        "200":
+          description: Triage verdict (model or fallback).
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - result
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+                  result:
+                    $ref: "#/components/schemas/TriageResult"
+        "400":
+          description: Invalid JSON body or message fails validation.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ok
+                  - error
+                properties:
+                  ok:
+                    type: boolean
+                    const: false
+                  error:
+                    type: string
+
+components:
+  securitySchemes:
+    sessionCookie:
+      description: |
+        The browser-authenticated HTTP API. Auth comes from the signed session
+        cookies `hcs_admin_session` / `hcs_patient_session`; route handlers call
+        `getSession()` and enforce role + ownership server-side.
+      type: apiKey
+      in: cookie
+      name: hcs_admin_session
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Stable, human-readable reason.
+
+    TriageResult:
+      type: object
+      required:
+        - urgency
+        - reason
+        - source
+      properties:
+        urgency:
+          type: string
+          enum:
+            - urgent
+            - routine
+          description: The advisory urgency verdict; never a diagnosed condition.
+        reason:
+          type: string
+          description: One short sentence explaining the verdict.
+        source:
+          type: string
+          enum:
+            - model
+            - fallback
+          description: "model: Gemini produced the verdict; fallback: degraded path."
