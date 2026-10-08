@@ -14,5 +14,6 @@ a superseding decision is recorded as a new ADR that references the old one.
 | [ADR-005](ADR-005-appointment-scheduling.md) | Deterministic slot ids make booking a write-once, conflict-free insert | Accepted |
 | [ADR-006](ADR-006-tamper-evident-audit-trail.md) | Hash-chained, append-only audit ledger for every PHI access | Accepted |
 | [ADR-007](ADR-007-server-actions-interface.md) | Every mutation is a `"use server"` action; the database is never written by the client | Accepted |
+| [ADR-008](ADR-008-job-queue.md) | Persistent, type-tagged job queue drains PDF invoices and reminders on a protected cron | Accepted |
 
 Records follow the MADR/Classic ADR shape: Context, Decision, Consequences.

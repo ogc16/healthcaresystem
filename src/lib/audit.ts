@@ -46,7 +46,8 @@ export type AuditAction =
   | "appointment.read"
   | "appointment.list"
   | "appointment.update"
-  | "document.read";
+  | "document.read"
+  | "document.create";
 
 export type AuditResourceType =
   | "patient"

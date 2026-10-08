@@ -24,6 +24,7 @@ import {
   isAdminSession,
 } from "../auth/guards";
 import { createThrottle } from "../auth/throttle";
+import { enqueueJob } from "../job-queue";
 import {
   attachPatientSummaries,
   batchFetchPatientSummaries,
@@ -373,6 +374,18 @@ export const updateAppointment = async ({
       actorId: session.userId ?? "admin",
       detail: `${type === "schedule" ? "Scheduled" : "Cancelled"} for ${appointment.primaryPhysician}`,
     });
+
+    // Confirming a booking hands the invoice work to the job queue instead of
+    // doing PDF generation + upload + notification here in the request. The
+    // deterministic job id means an appointment ever gets one invoice; a
+    // re-schedule conflicts with the existing job and is silently ignored.
+    if (updatedAppointment.status === "scheduled") {
+      await enqueueJob({
+        type: "invoice.generate",
+        jobId: `invoice-${appointmentId}`,
+        payload: { appointmentId },
+      });
+    }
 
     const smsMessage = `Greetings from CarePulse. ${type === "schedule" ? `Your appointment is confirmed for ${formatDateTime(appointment.schedule!, timeZone).dateTime} with Dr. ${appointment.primaryPhysician}` : `We regret to inform that your appointment for ${formatDateTime(appointment.schedule!, timeZone).dateTime} is cancelled. Reason:  ${appointment.cancellationReason}`}.`;
 

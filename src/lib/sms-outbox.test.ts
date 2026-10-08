@@ -97,12 +97,49 @@ describe("enqueueSms", () => {
         { userId: "user-1", content: "hello" },
         { databases: asDatabases(databases) }
       )
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(false);
 
     expect(consoleSpy).toHaveBeenCalledWith(
       expect.stringContaining("Failed to queue SMS"),
       expect.any(Error)
     );
+  });
+
+  it("refuses a duplicate when a dedupeKey row already exists", async () => {
+    const databases = fakeDatabase();
+    databases.listDocuments.mockResolvedValue({
+      total: 1,
+      documents: [{ $id: "existing" }],
+    });
+
+    process.env.DATABASE_ID = "db";
+    process.env.SMS_OUTBOX_COLLECTION_ID = "sms_outbox";
+
+    const queued = await enqueueSms(
+      { userId: "user-1", content: "hello", dedupeKey: "reminder:a:2026-01-01" },
+      { databases: asDatabases(databases) }
+    );
+
+    expect(queued).toBe(false);
+    expect(databases.createDocument).not.toHaveBeenCalled();
+  });
+
+  it("stores dedupeKey on a fresh outbox row", async () => {
+    const databases = fakeDatabase();
+    databases.listDocuments.mockResolvedValue({ total: 0, documents: [] });
+    databases.createDocument.mockResolvedValue({ $id: "msg-1" });
+
+    process.env.DATABASE_ID = "db";
+    process.env.SMS_OUTBOX_COLLECTION_ID = "sms_outbox";
+
+    const queued = await enqueueSms(
+      { userId: "user-1", content: "hello", dedupeKey: "reminder:a:2026-01-01" },
+      { databases: asDatabases(databases) }
+    );
+
+    expect(queued).toBe(true);
+    const [, , , data] = databases.createDocument.mock.calls[0];
+    expect(data.dedupeKey).toBe("reminder:a:2026-01-01");
   });
 });
 

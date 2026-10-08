@@ -26,6 +26,51 @@ servers:
     description: Local development (matches the e2e web server port)
 
 paths:
+  /api/cron/jobs:
+    get:
+      operationId: drainJobQueue
+      summary: Drain the persistent job queue
+      description: >
+        Seeds today's reminder-dispatch job (a deterministic day-scoped id, so
+        repeated calls cannot stack dispatches) and then runs up to
+        `JOB_QUEUE_DRAIN_LIMIT` due jobs: `invoice.generate` builds a PDF, uploads
+        it to the document bucket, audits the creation, and notifies the patient;
+        `reminder.dispatch` scans for scheduled appointments in the coming 24h and
+        enqueues a de-duplicated SMS per patient.
+      security:
+        - cronSecret: []
+      responses:
+        "200":
+          description: Queue drained
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, processed]
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+                  processed:
+                    type: array
+                    items:
+                      type: object
+                      required: [$id, type, outcome, attempts]
+                      properties:
+                        $id: { type: string }
+                        type: { type: string }
+                        outcome:
+                          type: string
+                          enum: [done, retry, failed]
+                        attempts: { type: integer }
+                        result: { type: string }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/CronDisabled"
+
   /api/cron/sms:
     get:
       operationId: drainSmsOutbox
@@ -243,6 +288,15 @@ paths:
 
 components:
   securitySchemes:
+    cronSecret:
+      description: |
+        Authenticates the scheduled drain endpoints. The caller sends the
+        deployment's `CRON_SECRET` in the `x-cron-secret` header; a missing or
+        mismatched secret is rejected with 401/503, so an unconfigured
+        deployment never exposes a public drain.
+      type: apiKey
+      in: header
+      name: x-cron-secret
     sessionCookie:
       description: |
         The browser-authenticated HTTP API. Auth comes from the signed session
@@ -261,6 +315,49 @@ components:
         error:
           type: string
           description: Stable, human-readable reason.
+
+  responses:
+    Unauthorized:
+      description: Missing or non-matching `x-cron-secret`.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ok, error]
+            properties:
+              ok:
+                type: boolean
+                const: false
+              error:
+                type: string
+
+    CronDisabled:
+      description: "`CRON_SECRET` is not configured; the drain is disabled."
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ok, error]
+            properties:
+              ok:
+                type: boolean
+                const: false
+              error:
+                type: string
+
+    InternalError:
+      description: The drain itself failed.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ok, error]
+            properties:
+              ok:
+                type: boolean
+                const: false
+              error:
+                type: string
 
     TriageResult:
       type: object

@@ -94,6 +94,7 @@ const ENV_SPECS: readonly EnvSpec[] = [
   { key: "APPOINTMENT_COLLECTION_ID", required: true, schema: identifier },
   { key: "AUDIT_COLLECTION_ID", required: true, schema: identifier },
   { key: "SMS_OUTBOX_COLLECTION_ID", required: true, schema: identifier },
+  { key: "JOB_QUEUE_COLLECTION_ID", required: true, schema: identifier },
   { key: "NEXT_PUBLIC_BUCKET_ID", required: true, schema: identifier },
   {
     key: "PHI_ENCRYPTION_KEY",
@@ -159,6 +160,14 @@ const ENV_SPECS: readonly EnvSpec[] = [
   },
   {
     key: "SMS_MAX_ATTEMPTS",
+    required: false,
+    default: "5",
+    schema: z
+      .string()
+      .regex(/^([1-9]|[12]\d|30)$/, "must be an integer between 1 and 30"),
+  },
+  {
+    key: "JOB_MAX_ATTEMPTS",
     required: false,
     default: "5",
     schema: z
@@ -267,6 +276,7 @@ export const validateEnv = () => {
 const ENV_DEFAULTS: Record<string, string> = {
   SENTRY_TELEMETRY: "false",
   SMS_MAX_ATTEMPTS: "5",
+  JOB_MAX_ATTEMPTS: "5",
   GEMINI_MODEL: "gemini-2.5-flash",
 };
 

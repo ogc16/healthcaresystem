@@ -44,4 +44,17 @@ export interface SmsOutbox extends Models.Document {
   attempts: number;
   nextAttemptAt: string;
   lastError: string;
+  dedupeKey?: string;
+}
+
+export interface JobRecord extends Models.Document {
+  type: string;
+  payload: string;
+  status: "pending" | "processing" | "done" | "failed";
+  attempts: number;
+  nextAttemptAt: string;
+  claimedAt: string;
+  lastError: string;
+  result: string;
+  completedAt: string;
 }

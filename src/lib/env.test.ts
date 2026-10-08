@@ -41,6 +41,7 @@ const setComplete = () => {
   process.env.APPOINTMENT_COLLECTION_ID = "appointments";
   process.env.AUDIT_COLLECTION_ID = "audit";
   process.env.SMS_OUTBOX_COLLECTION_ID = "sms_outbox";
+  process.env.JOB_QUEUE_COLLECTION_ID = "job_queue";
   process.env.NEXT_PUBLIC_BUCKET_ID = "bucket";
   process.env.PHI_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
   process.env.ADMIN_PASSKEY = "123456";

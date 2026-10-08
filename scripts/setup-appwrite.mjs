@@ -43,6 +43,7 @@ const DOCTOR_COLLECTION_ID = "doctors";
 const APPOINTMENT_COLLECTION_ID = "appointments";
 const AUDIT_COLLECTION_ID = "audit_log";
 const SMS_OUTBOX_COLLECTION_ID = "sms_outbox";
+const JOB_QUEUE_COLLECTION_ID = "job_queue";
 const BUCKET_ID = "carepulse-uploads";
 
 const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
@@ -229,9 +230,10 @@ async function ensureAuditLog() {
 }
 
 async function ensureSmsOutbox() {
-  const exists = await ensureCollection(SMS_OUTBOX_COLLECTION_ID, "sms_outbox");
-
-  if (exists) return;
+  // Attributes go through the idempotent ensure* helpers (not gated on the
+  // collection having just been created) so a re-run upgrades a pre-existing
+  // outbox with `dedupeKey`, exactly like the audit_log chain upgrade.
+  await ensureCollection(SMS_OUTBOX_COLLECTION_ID, "sms_outbox");
 
   await ensureString(SMS_OUTBOX_COLLECTION_ID, "userId", 255, true);
   await ensureString(SMS_OUTBOX_COLLECTION_ID, "content", 2000, true);
@@ -239,6 +241,21 @@ async function ensureSmsOutbox() {
   await ensureInteger(SMS_OUTBOX_COLLECTION_ID, "attempts", true, 0);
   await ensureDatetime(SMS_OUTBOX_COLLECTION_ID, "nextAttemptAt", true);
   await ensureString(SMS_OUTBOX_COLLECTION_ID, "lastError", 500, false, "");
+  await ensureString(SMS_OUTBOX_COLLECTION_ID, "dedupeKey", 255, false, "");
+}
+
+async function ensureJobQueue() {
+  await ensureCollection(JOB_QUEUE_COLLECTION_ID, "job_queue");
+
+  await ensureString(JOB_QUEUE_COLLECTION_ID, "type", 128, true);
+  await ensureString(JOB_QUEUE_COLLECTION_ID, "payload", 1000, true, "{}");
+  await ensureString(JOB_QUEUE_COLLECTION_ID, "status", 16, true, "pending");
+  await ensureInteger(JOB_QUEUE_COLLECTION_ID, "attempts", true, 0);
+  await ensureDatetime(JOB_QUEUE_COLLECTION_ID, "nextAttemptAt", true);
+  await ensureDatetime(JOB_QUEUE_COLLECTION_ID, "claimedAt", false);
+  await ensureString(JOB_QUEUE_COLLECTION_ID, "lastError", 500, false, "");
+  await ensureString(JOB_QUEUE_COLLECTION_ID, "result", 2000, false, "");
+  await ensureDatetime(JOB_QUEUE_COLLECTION_ID, "completedAt", false);
 }
 
 console.log(`Target: ${ENDPOINT}, project ${PROJECT_ID}\n`);
@@ -326,6 +343,9 @@ await ensureAuditLog();
 console.log("\nsms_outbox collection");
 await ensureSmsOutbox();
 
+console.log("\njob_queue collection");
+await ensureJobQueue();
+
 console.log("\n--- .env.local (paste/merge into .env.local) ---");
 const phiEncryptionKey = process.env.PHI_ENCRYPTION_KEY
   ? `PHI_ENCRYPTION_KEY="${process.env.PHI_ENCRYPTION_KEY}"`
@@ -343,6 +363,7 @@ console.log([
   `APPOINTMENT_COLLECTION_ID="${APPOINTMENT_COLLECTION_ID}"`,
   `AUDIT_COLLECTION_ID="${AUDIT_COLLECTION_ID}"`,
   `SMS_OUTBOX_COLLECTION_ID="${SMS_OUTBOX_COLLECTION_ID}"`,
+  `JOB_QUEUE_COLLECTION_ID="${JOB_QUEUE_COLLECTION_ID}"`,
   `NEXT_PUBLIC_BUCKET_ID="${BUCKET_ID}"`,
   phiEncryptionKey,
   "",
@@ -361,6 +382,10 @@ console.log([
   "# TWILIO_ACCOUNT_SID",
   "# TWILIO_AUTH_TOKEN",
   "# TWILIO_PHONE_NUMBER",
+  "",
+  "# Optional: how many attempts a drained job gets before it is marked failed.",
+  "# Default 5; capped exponential backoff between attempts.",
+  "# JOB_MAX_ATTEMPTS=5",
 ].join("\n"));
 
 console.log(

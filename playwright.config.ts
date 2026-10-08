@@ -19,6 +19,7 @@ const appEnv = {
   APPOINTMENT_COLLECTION_ID: "test-appointments",
   AUDIT_COLLECTION_ID: "test-audit",
   SMS_OUTBOX_COLLECTION_ID: "test-sms-outbox",
+  JOB_QUEUE_COLLECTION_ID: "test-job-queue",
   NEXT_PUBLIC_BUCKET_ID: "test-bucket",
   PHI_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   ADMIN_PASSKEY: "123456",

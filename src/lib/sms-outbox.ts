@@ -39,11 +39,20 @@ type SmsOutboxDeps = {
  * `recordAudit`: a failing provider must never take the scheduling update that
  * produced the notification down with it — booking still succeeds, and the
  * drain cron retries the message later.
+ *
+ * Pass `dedupeKey` when a notification must be sent at most once (e.g.
+ * `reminder:<appointmentId>:<date>`): if an outbox row already carries that
+ * key, the duplicate is refused and `false` is returned. Returns `true` when a
+ * row was queued.
  */
 export const enqueueSms = async (
-  { userId, content }: { userId: string; content: string },
+  {
+    userId,
+    content,
+    dedupeKey,
+  }: { userId: string; content: string; dedupeKey?: string },
   deps: SmsOutboxDeps = {}
-) => {
+): Promise<boolean> => {
   const databases = deps.databases ?? getDatabases();
 
   // Read live rather than from a frozen import: `appwrite.config` snapshots
@@ -58,6 +67,19 @@ export const enqueueSms = async (
       );
     }
 
+    if (dedupeKey) {
+      const existing = await databases.listDocuments<SmsOutbox>(
+        env.DATABASE_ID,
+        collectionId,
+        [
+          sdk.Query.equal("dedupeKey", [dedupeKey]),
+          sdk.Query.limit(1),
+        ]
+      );
+
+      if (existing.documents.length > 0) return false;
+    }
+
     await databases.createDocument(
       env.DATABASE_ID,
       collectionId,
@@ -69,10 +91,15 @@ export const enqueueSms = async (
         attempts: 0,
         nextAttemptAt: new Date().toISOString(),
         lastError: "",
+        ...(dedupeKey ? { dedupeKey } : {}),
       }
     );
+
+    return true;
   } catch (error) {
     console.error("Failed to queue SMS for recipient:", error);
+
+    return false;
   }
 };
 
