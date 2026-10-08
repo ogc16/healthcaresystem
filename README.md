@@ -14,7 +14,7 @@
     </div>
 
     <div align="center">
-      <b>Project documentation:</b> <a href="docs/README.md">architecture</a> · <a href="docs/security.md">security</a> · <a href="docs/environment.md">environment variables</a>
+      <b>Project documentation:</b> <a href="docs/README.md">architecture</a> · <a href="docs/adr/README.md">ADR</a> · <a href="docs/openapi.yaml">API</a> · <a href="docs/security.md">security</a> · <a href="docs/environment.md">environment variables</a>
     </div>
 </div>
 
