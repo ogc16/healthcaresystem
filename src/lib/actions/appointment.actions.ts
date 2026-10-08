@@ -13,6 +13,7 @@ import {
 import {
   APPOINTMENT_COLLECTION_ID,
   DATABASE_ID,
+  PATIENT_COLLECTION_ID,
   getDatabases,
   missingAppwriteEnv,
 } from "../appwrite.config";
@@ -23,11 +24,25 @@ import {
   isAdminSession,
 } from "../auth/guards";
 import { createThrottle } from "../auth/throttle";
+import {
+  attachPatientSummaries,
+  batchFetchPatientSummaries,
+  PatientSummary,
+  uniquePatientIds,
+} from "../patient-batch";
 import { enqueueSms } from "../sms-outbox";
 import { formatDateTime, parseStringify } from "../utils";
 import { isValidTimeZone } from "../validation";
 
 const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * Cap on the dashboard's "recent" list. The dashboard derives its counts from
+ * the page it actually fetched rather than pretending the first page is the
+ * whole database, so this is a display window, not a reporting query.
+ * Keeping it bounded also bounds the batched patient hydration below.
+ */
+const RECENT_APPOINTMENTS_PAGE_SIZE = 100;
 
 /** Generous enough for booking several doctors in one sitting, tight enough to stop filling the collection. */
 const bookingAttempts = createThrottle({
@@ -184,8 +199,41 @@ export const getRecentAppointmentList = async (): Promise<RecentAppointments> =>
     const appointments = await getDatabases().listDocuments<Appointment>(
       DATABASE_ID!,
       APPOINTMENT_COLLECTION_ID!,
-      [Query.orderDesc("$createdAt")]
+      [Query.orderDesc("$createdAt"), Query.limit(RECENT_APPOINTMENTS_PAGE_SIZE)]
     );
+
+    // Appwrite relations come back as a plain id string, so the dashboard's
+    // `appointment.patient.name` only resolves if this server hydrates it.
+    // Doing it here, with one batched query plus a lookup map instead of one
+    // query per row, is what keeps a growing appointment list from turning
+    // into N+1 round-trips. Only the fields the table renders are attached.
+    const patientIds = uniquePatientIds(appointments.documents);
+    let patientLookup = new Map<string, PatientSummary>();
+
+    if (patientIds.length > 0) {
+      try {
+        patientLookup = await batchFetchPatientSummaries(patientIds, (queries) =>
+          getDatabases().listDocuments<Appointment>(
+            DATABASE_ID!,
+            PATIENT_COLLECTION_ID!,
+            queries
+          )
+        );
+      } catch (error) {
+        // A failed join is logged and degraded, never fatal: the dashboard can
+        // still render counts and rows, and the underlying error stays visible
+        // in the server log instead of turning the whole page "unreachable".
+        console.error(
+          "An error occurred while hydrating patient names for the dashboard:",
+          error
+        );
+      }
+    }
+
+    const documents = attachPatientSummaries(
+      appointments.documents,
+      patientLookup
+    ) as Appointment[];
 
     // const scheduledAppointments = (
     //   appointments.documents as Appointment[]
@@ -213,7 +261,7 @@ export const getRecentAppointmentList = async (): Promise<RecentAppointments> =>
       cancelledCount: 0,
     };
 
-    const counts = appointments.documents.reduce(
+    const counts = documents.reduce(
       (acc, appointment) => {
         switch (appointment.status) {
           case "scheduled":
@@ -234,7 +282,7 @@ export const getRecentAppointmentList = async (): Promise<RecentAppointments> =>
     const data = {
       totalCount: appointments.total,
       ...counts,
-      documents: appointments.documents,
+      documents,
     };
 
     await recordAudit({
