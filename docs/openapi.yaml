@@ -171,6 +171,36 @@ paths:
                   error:
                     type: string
 
+  /api/admin/telemetry:
+    get:
+      operationId: openAdminTelemetryStream
+      summary: Live audit-ledger events for the admin dashboard
+      description: |
+        Server-Sent Events stream of committed audit-ledger entries, opened by
+        the admin dashboard with a plain `EventSource`. The admin session cookie
+        authenticates the stream (the same cookie the dashboard uses). The
+        server first sends a `ready` event once the subscription is registered,
+        then an `audit.entry` event per committed ledger entry, plus a comment
+        heartbeat every 15s to keep the connection warm. Events carry the
+        ledger projection only (seq, action, actor, resource, timestamp) —
+        never PHI record bodies.
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Live telemetry stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: "event: ready\ndata: {\"ok\":true}\n\n"
+        "401":
+          description: No valid admin session cookie.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /api/documents/{fileId}:
     get:
       operationId: streamDocument

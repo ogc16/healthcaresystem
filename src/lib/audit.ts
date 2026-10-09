@@ -37,6 +37,7 @@ import {
 } from "./appwrite.config";
 import type { SessionRole } from "./auth/session";
 import { clientAddress } from "./auth/throttle";
+import { publishAuditEntry } from "./telemetry";
 
 export type AuditAction =
   | "patient.create"
@@ -229,6 +230,21 @@ export const appendAuditEntry = async (
         entry,
         []
       );
+
+      // Only a committed entry is observable: live admin telemetry is fed from
+      // here, so a retried or failed write is never reported as if it existed.
+      // The projection strips chain bookkeeping (hash, prevHash, ip) and any
+      // future payload so the stream stays PHI-free by construction.
+      publishAuditEntry({
+        seq: entry.seq,
+        action: entry.action,
+        resourceType: entry.resourceType,
+        resourceId: entry.resourceId,
+        actorRole: entry.actorRole,
+        actorId: entry.actorId,
+        detail: entry.detail,
+        occurredAt: entry.occurredAt,
+      });
 
       return entry;
     } catch (error) {
