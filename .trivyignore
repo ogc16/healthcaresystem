@@ -1,0 +1,5 @@
+# ReDoS in braces via unbalanced brace expansion. It arrives transitively
+# through the tailwindcss@3 / postcss build toolchain and has no patched
+# release; remediation is the breaking tailwindcss@4 major upgrade. Revisit
+# this entry when that upgrade lands.
+CVE-2026-93687

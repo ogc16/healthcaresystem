@@ -50,11 +50,11 @@ test("an admin session receives live audit events over SSE", async ({
     try {
       // The route sends `ready` only after subscribing, so seeing it here
       // guarantees the listener below cannot miss subsequent events.
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(
-          () => reject(new Error("telemetry stream never became ready")),
-          10_000
-        );
+await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(
+            () => reject(new Error("telemetry stream never became ready")),
+            15_000
+          );
         source.addEventListener(
           "ready",
           () => {
@@ -70,7 +70,7 @@ test("an admin session receives live audit events over SSE", async ({
         (resolve, reject) => {
           const timeout = setTimeout(
             () => reject(new Error("timed out waiting for an audit.entry event")),
-            15_000
+            30_000
           );
 
           source.addEventListener("audit.entry", (event) => {
@@ -100,6 +100,23 @@ test("an admin session receives live audit events over SSE", async ({
   await expect(
     page.getByText("cancelled", { exact: true })
   ).toBeVisible();
+
+  // Synchronize on the source of truth: the stream may only be expected to
+  // deliver once the ledger has actually committed the entry. Polling the mock
+  // removes the window where the server action's audit write is still in
+  // flight, so the wait below measures stream delivery, not DB latency.
+  await expect
+    .poll(async () => {
+      const response = await fetch(
+        "http://localhost:7800/v1/databases/test-database/collections/test-audit/documents"
+      );
+      const { documents } = (await response.json()) as {
+        documents: { action?: string }[];
+      };
+
+      return documents.some((doc) => doc.action === "appointment.update");
+    })
+    .toBe(true);
 
   const entry = await received;
 

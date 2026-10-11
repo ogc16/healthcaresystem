@@ -1,0 +1,18 @@
+# Build context hygiene: keep the builder stage lean and never leak working
+# copies of secrets (env files) or cloud-synced artifacts into the image.
+node_modules
+.next
+.git
+coverage
+test-results
+playwright-report
+blob-report
+e2e
+docs
+.vscode
+*.log
+Dockerfile
+.dockerignore
+.env
+.env.*
+!.env.example

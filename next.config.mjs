@@ -6,6 +6,10 @@ import { withSentryConfig } from "@sentry/nextjs/config";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Self-hosted deployment (Dockerfile) relies on the standalone trace: only
+  // the server bundle, its traced dependencies, and `.next/static` get copied,
+  // which keeps the image small and the surface auditable.
+  output: "standalone",
   // Turbopack walks up looking for a lockfile to infer the project root. This
   // repo is nested under the user profile, which has its own package-lock.json,
   // so Turbopack warned on every `next dev` / `next build` that it was ignoring

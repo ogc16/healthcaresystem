@@ -16,8 +16,10 @@ permissions:
   contents: read
 
 jobs:
-  verify:
-    name: typecheck, lint, test, build
+  # Static verification: catches type, lint and coverage-floor regressions
+  # fast and independently from the slower e2e and image jobs.
+  static-checks:
+    name: typecheck, lint, unit, coverage floor
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -35,14 +37,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # No Appwrite variables are set. Client construction in
-      # src/lib/appwrite.config.ts is deferred to first use and fails loudly by
-      # name, so a build that never calls the API needs no real credentials.
-      # SENTRY_AUTH_TOKEN is deliberately absent too: with no token the
-      # source-map upload is skipped instead of failing the build.
-      - name: Disable Sentry telemetry
-        run: echo "SENTRY_TELEMETRY=false" >> "$GITHUB_ENV"
-
       - name: Typecheck
         run: npm run typecheck
 
@@ -55,36 +49,7 @@ jobs:
       - name: Unit tests and coverage floor
         run: npm run test:coverage
 
-      - name: Build
-        run: npm run build
-
-  # Dependency scan (informational, non-blocking) and Playwright tests run on
-  # their own jobs so a scanner finding never holds up the build.
-  dependency-scan:
-    name: dependency scan (informational)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      # High-severity advisories in the tailwindcss@3 toolchain (braces,
-      # micromatch, postcss-selector-parser) currently have no fix short of a
-      # breaking upgrade to tailwindcss@4 (`npm audit fix --force`). This step
-      # stays informational until that upgrade is done; run `npm run audit`
-      # locally to review the full report.
-      - name: Audit production dependencies
-        run: npm run audit
-        continue-on-error: true
-
+  # E2E against the mock Appwrite server; Chromium ships inside the action.
   e2e:
     name: end-to-end (mock appwrite)
     runs-on: ubuntu-latest
@@ -108,3 +73,76 @@ jobs:
 
       - name: Run e2e tests
         run: npx playwright test
+
+  # Filesystem vulnerability scan over the dependency manifest; no install is
+  # needed because the lockfile names the whole tree. Blocks on HIGH/CRITICAL
+  # except for what .trivyignore documents (the unfixable tailwindcss@3
+  # toolchain advisories).
+  trivy-fs:
+    name: trivy filesystem scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan repository
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          exit-code: '1'
+          severity: HIGH,CRITICAL
+          vuln-type: library
+
+  # The production build gate lives here: Docker builds the standalone image
+  # (which runs `next build`), and Trivy then verifies the shipped artifacts —
+  # base OS packages and the traced dependencies — carry no HIGH/CRITICAL
+  # findings. Logged vulnerabilities are legitimate signal, not noise from a
+  # dev-only dependency tree.
+  docker-image:
+    name: docker build + trivy image scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t healthcaresystem:ci .
+
+      - name: Scan image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: healthcaresystem:ci
+          format: table
+          exit-code: '1'
+          severity: HIGH,CRITICAL
+          vuln-type: os,library
+
+  # Dependency scan of the production tree via npm audit. Informational and
+  # non-blocking: high-severity advisories in the tailwindcss@3 toolchain
+  # (braces, micromatch, postcss-selector-parser) have no fix short of a
+  # breaking upgrade to tailwindcss@4 (`npm audit fix --force`). Run `npm run
+  # audit` locally to review the full report.
+  dependency-scan:
+    name: npm audit (informational)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit production dependencies
+        run: npm run audit
+        continue-on-error: true
