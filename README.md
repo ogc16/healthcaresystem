@@ -220,7 +220,7 @@ flowchart TB
     Pages -->|verify session| Auth
     Actions -->|authorization check| Auth
     Actions -->|encrypt before write / decrypt on read| FeldEncrypt
-    Actions -->|'batch equal($id) lookups'| Hydration
+    Actions -->|"batch equal($id) lookups"| Hydration
     Actions -->|every PHI access logged| Audit
     Actions --> DB
     Actions --> Storage
