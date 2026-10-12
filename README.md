@@ -13,8 +13,8 @@
       Patient registration, appointment scheduling, and an admin dashboard built with Next.js 16 and Appwrite.
     </div>
 
-    <div align="center">
-      <b>Project documentation:</b> <a href="docs/README.md">architecture</a> · <a href="docs/adr/README.md">ADR</a> · <a href="docs/openapi.yaml">API</a> · <a href="docs/security.md">security</a> · <a href="docs/environment.md">environment variables</a>
+  <div align="center">
+      <b>Project documentation:</b> <ul><li><a href="docs/README.md">Architecture</a></li><li><a href="docs/adr/README.md">ADR</a></li><li><a href="docs/openapi.yaml">  API</a></li> <li><a href="docs/security.md">Security</a></li> <li><a href="docs/environment.md">  Environment variables</a></li></ul>
     </div>
 </div>
 
