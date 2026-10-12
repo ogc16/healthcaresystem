@@ -196,9 +196,9 @@ flowchart TB
         FeldEncrypt[PHI field encryption AES-256-GCM]
         Hydration[Batched patient hydration]
         Audit[Hash-chained audit ledger]
-        SmsCron[/api/cron/sms - drains outbox]
+        SmsCron["/api/cron/sms - drains outbox"]
         DocRoute["/api/documents/{fileId} - authorized stream"]
-        Triage[/api/ai/triage - urgency verdict]
+        Triage["/api/ai/triage - urgency verdict"]
     end
 
     subgraph Appwrite
