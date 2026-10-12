@@ -5,7 +5,7 @@
   <div>
     <img src="https://img.shields.io/badge/-Next_JS-black?style=for-the-badge&logoColor=white&logo=nextdotjs&color=000000" alt="nextdotjs" />
     <img src="https://img.shields.io/badge/-TypeScript-black?style=for-the-badge&logoColor=white&logo=typescript&color=3178C6" alt="typescript" />
-    <img src="https://img.shields.io/badge/-Tailwind_CSS-black?style=for-the-badge&logoColor=white&logo=tailwindcss&color=06B6D4" alt="tailwindcss" />
+    <img src="https://img.shields.io/badge/-Tailwind_CSS-bl]ack?style=for-the-badge&logoColor=white&logo=tailwindcss&color=06B6D4" alt="tailwindcss" />
     <img src="https://img.shields.io/badge/-Appwrite-black?style=for-the-badge&logoColor=white&logo=appwrite&color=FD366E" alt="appwrite" />
   </div>
 
@@ -194,7 +194,7 @@ flowchart TB
         Actions[Server Actions]
         Auth[Auth: guards + HMAC session]
         FeldEncrypt[PHI field encryption AES-256-GCM]
-        Hydration[Batched patient hydration]
+        Hydration["Batched patient hydration"]
         Audit[Hash-chained audit ledger]
         SmsCron["/api/cron/sms - drains outbox"]
         DocRoute["/api/documents/{fileId} - authorized stream"]
@@ -202,14 +202,14 @@ flowchart TB
     end
 
     subgraph Appwrite
-        DB[(Collections: patients, appointments, doctors,\naudit_log, sms_outbox)]
+        DB["Collections: patients, appointments, doctors, audit_log, sms_outbox"]
         Storage[(Storage Bucket)]
         SMS[Messaging]
         Users[Users API]
     end
 
     subgraph External
-        Scheduler[(Cron trigger - calls SmsCron with x-cron-secret)]
+        Scheduler["Cron trigger - calls SmsCron with x-cron-secret"]
         Gemini[Gemini API]
     end
 
