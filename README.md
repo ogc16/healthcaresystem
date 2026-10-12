@@ -197,7 +197,7 @@ flowchart TB
         Hydration[Batched patient hydration]
         Audit[Hash-chained audit ledger]
         SmsCron[/api/cron/sms - drains outbox]
-        DocRoute[/api/documents/{fileId} - authorized stream]
+        DocRoute['/api/documents/{fileId} - authorized stream']
         Triage[/api/ai/triage - urgency verdict]
     end
 
